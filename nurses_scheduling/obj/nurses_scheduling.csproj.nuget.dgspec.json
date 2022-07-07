@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "C:\\Users\\Ognjen\\Documents\\FON\\Master\\NPR\\nurses_scheduling_back\\nurses_scheduling\\nurses_scheduling\\nurses_scheduling.csproj": {}
+    "C:\\Users\\Ognjen\\Documents\\FON\\Master\\NPR\\nurses_scheduling_back\\nurses_scheduling\\nurses_scheduling.csproj": {}
   },
   "projects": {
-    "C:\\Users\\Ognjen\\Documents\\FON\\Master\\NPR\\nurses_scheduling_back\\nurses_scheduling\\nurses_scheduling\\nurses_scheduling.csproj": {
+    "C:\\Users\\Ognjen\\Documents\\FON\\Master\\NPR\\nurses_scheduling_back\\nurses_scheduling\\nurses_scheduling.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\Ognjen\\Documents\\FON\\Master\\NPR\\nurses_scheduling_back\\nurses_scheduling\\nurses_scheduling\\nurses_scheduling.csproj",
+        "projectUniqueName": "C:\\Users\\Ognjen\\Documents\\FON\\Master\\NPR\\nurses_scheduling_back\\nurses_scheduling\\nurses_scheduling.csproj",
         "projectName": "nurses_scheduling",
-        "projectPath": "C:\\Users\\Ognjen\\Documents\\FON\\Master\\NPR\\nurses_scheduling_back\\nurses_scheduling\\nurses_scheduling\\nurses_scheduling.csproj",
+        "projectPath": "C:\\Users\\Ognjen\\Documents\\FON\\Master\\NPR\\nurses_scheduling_back\\nurses_scheduling\\nurses_scheduling.csproj",
         "packagesPath": "C:\\Users\\Ognjen\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\Ognjen\\Documents\\FON\\Master\\NPR\\nurses_scheduling_back\\nurses_scheduling\\nurses_scheduling\\obj\\",
+        "outputPath": "C:\\Users\\Ognjen\\Documents\\FON\\Master\\NPR\\nurses_scheduling_back\\nurses_scheduling\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
           "C:\\Users\\Ognjen\\AppData\\Roaming\\NuGet\\NuGet.Config",
@@ -40,6 +40,26 @@
         "net6.0": {
           "targetAlias": "net6.0",
           "dependencies": {
+            "Microsoft.EntityFrameworkCore": {
+              "target": "Package",
+              "version": "[6.0.6, )"
+            },
+            "Microsoft.EntityFrameworkCore.Design": {
+              "include": "Runtime, Build, Native, ContentFiles, Analyzers, BuildTransitive",
+              "suppressParent": "All",
+              "target": "Package",
+              "version": "[6.0.6, )"
+            },
+            "Microsoft.EntityFrameworkCore.SqlServer": {
+              "target": "Package",
+              "version": "[6.0.6, )"
+            },
+            "Microsoft.EntityFrameworkCore.Tools": {
+              "include": "Runtime, Build, Native, ContentFiles, Analyzers, BuildTransitive",
+              "suppressParent": "All",
+              "target": "Package",
+              "version": "[6.0.6, )"
+            },
             "Swashbuckle.AspNetCore": {
               "target": "Package",
               "version": "[6.2.3, )"
