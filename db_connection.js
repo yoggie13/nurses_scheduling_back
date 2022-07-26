@@ -1,8 +1,5 @@
-const path = require('path')
-require('dotenv').config()
+require('dotenv').config();
 var mysql = require("mysql");
-
-console.log(process.env)
 
 var connection = mysql.createConnection({
     host: process.env.DB_HOST,
