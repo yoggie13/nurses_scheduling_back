@@ -330,7 +330,7 @@ app.put('/groupingrules', (req, res) => {
     };
 
     edit.forEach((param) => {
-        db_connection.query(`UPDATE sequencerules SET Name = '${param.Name}' WHERE SequenceRuleID = ${param.SequenceRuleID}`,
+        db_connection.query(`UPDATE groupingrules SET Name = '${param.Name}', Max = ${param.Max}, Duration = ${param.Duration} WHERE GroupingRuleID = ${param.GroupingRuleID}`,
             (err) => {
                 if (err) {
                     rollBackTransaction;
