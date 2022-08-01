@@ -39,8 +39,8 @@ const rollBackTransaction = () => {
         if (err) throw err;
     });
 }
-const addNonWorkingDays = (request, schid) => {
-    db_connection.query(`INSERT INTO nonworkingdays values(${schid},${request.NurseID},'${request.Date_From.slice(0, 10)}','${request.Date_Until.slice(0, 10)}',${request.Day_Type},${request.IsMandatory})`,
+const addNonWorkingDays = async (request, schid, res) => {
+    db_connection.query(`INSERT INTO nonworkingdays values(${schid},${request.NurseID},${request.DateFrom},${request.DateUntil},${request.DayType},${request.IsMandatory})`,
         (err) => {
             if (err) {
                 rollBackTransaction;
@@ -48,10 +48,10 @@ const addNonWorkingDays = (request, schid) => {
             }
         });
 }
-const addNonWorkingShifts = (request, schid) => {
+const addNonWorkingShifts = async (request, schid, res) => {
     request.Shifts.forEach((shift, index) => {
         if (shift) {
-            db_connection.query(`INSERT INTO nonworkingshifts values(${schid},${request.NurseID},'${request.Date_From.slice(0, 10)}','${request.Date_Until.slice(0, 10)}',${index + 1},${request.IsMandatory})`,
+            db_connection.query(`INSERT INTO nonworkingshifts values(${schid},${request.NurseID},${request.DateFrom},${request.DateUntil},${index + 1},${request.IsMandatory})`,
                 (err) => {
                     if (err) {
                         rollBackTransaction;
@@ -60,7 +60,24 @@ const addNonWorkingShifts = (request, schid) => {
                 });
         }
     })
-
+}
+const addMustWorkShifts = async (request, schid, res) => {
+    db_connection.query(`INSERT INTO mustworkshifts values(${schid}, ${request.NurseID}, ${request.ShiftID}, ${request.DateFrom}, ${request.DateUntil})`,
+        (err) => {
+            if (err) {
+                rollBackTransaction;
+                res.status(500).send("Greška pri čuvanju izmena u bazi");
+            }
+        })
+}
+const addSpecialNeeds = async (request, schid, res) => {
+    db_connection.query(`INSERT INTO specialneedsshifts values(${schid}, ${request.Day}, ${request.ShiftID}, ${request.NumberOfNurses})`,
+        (err) => {
+            if (err) {
+                rollBackTransaction;
+                res.status(500).send("Greška pri čuvanju izmena u bazi");
+            }
+        })
 }
 
 app.use(
@@ -433,8 +450,7 @@ app.put('/groupingrules', (req, res) => {
 
     res.status(200).send("Uspešno sačuvano :)");
 })
-
-app.post('/requests/:name', async (req, res) => {
+app.post('/requests/', async (req, res) => {
     var requests = req.body;
 
     beginTransaction(), (err) => {
@@ -443,15 +459,26 @@ app.post('/requests/:name', async (req, res) => {
     };
 
     var schid = 0;
+    var date = new Date();
 
-    db_connection.query(`INSERT INTO schedules (GeneratedOn, Name) VALUES ('${new Date(Date.now()).toJSON().slice(0, 10)}', '${req.params.name}')`,
+    var NumberOfDays = new Date(date.getFullYear(), requests.schedule.Month, 0).getDate();
+    var WorkingDays = 0;
+
+    for (let i = 1; i <= NumberOfDays; i++) {
+        var day = new Date(date.getFullYear(), requests.schedule.Month, i).getDay();
+        if (day > 0 && day < 6)
+            WorkingDays++;
+    }
+
+    db_connection.query(`INSERT INTO schedules (GeneratedOn, Name, Month, NumberOfDays, WorkingDays) VALUES`
+        + `('${new Date(Date.now()).toJSON().slice(0, 10)}', '${requests.schedule.Name}', ${requests.schedule.Month}, ${NumberOfDays}, ${WorkingDays})`,
         (err) => {
             if (err) {
                 rollBackTransaction();
                 res.status(500).send("Greška pri unosu podataka u bazu");
             }
             else {
-                db_connection.query("SELECT last_insert_id() AS id",
+                db_connection.query("SELECT ScheduleID as id from schedules order by ScheduleID DESC LIMIT 1",
                     (err, result, fields) => {
                         if (err) {
                             rollBackTransaction();
@@ -459,14 +486,11 @@ app.post('/requests/:name', async (req, res) => {
                         }
                         else {
                             schid = result[0].id;
-                            console.log(schid);
 
-                            requests.forEach((request) => {
-                                if (request.Shifts === "all")
-                                    addNonWorkingDays(request, schid);
-                                else
-                                    addNonWorkingShifts(request, schid);
-                            });
+                            requests.days.forEach(async (request) => await addNonWorkingDays(request, schid, res));
+                            requests.shifts.forEach(async (request) => await addNonWorkingShifts(request, schid, res));
+                            requests.mustWork.forEach(async (request) => await addMustWorkShifts(request, schid, res));
+                            requests.specialNeeds.forEach(async (request) => await addSpecialNeeds(request, schid, res));
 
                             commitTransaction(), (err) => {
                                 if (err)
