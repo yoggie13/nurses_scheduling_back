@@ -39,14 +39,64 @@ const rollBackTransaction = () => {
         if (err) throw err;
     });
 }
-const addNonWorkingDays = async (request, schid, res) => {
-    db_connection.query(`INSERT INTO nonworkingdays values(${schid},${request.NurseID},${request.DateFrom},${request.DateUntil},${request.DayType},${request.IsMandatory})`,
-        (err) => {
-            if (err) {
-                rollBackTransaction;
-                res.status(500).send("Greška pri čuvanju izmena u bazi");
+const addNonWorkingDays = async (request, schid, res, month) => {
+
+    if (request.DayType === 2) {
+        var workDays = 0;
+        for (let i = request.DateFrom; i <= request.DateUntil; i++) {
+            var day = new Date(new Date().getFullYear(), month - 1, i).getDay();
+            if (day === 0 || day === 6) {
+                db_connection.query(`INSERT INTO nonworkingdays values(${schid},${request.NurseID},${i - workDays},${i - 1},${request.DayType},${request.IsMandatory})`,
+                    (err) => {
+                        if (err) {
+                            rollBackTransaction;
+                            res.status(500).send("Greška pri čuvanju izmena u bazi");
+                        }
+                    });
+                workDays = 0;
+                if (i + 1 <= request.DateUntil) {
+                    db_connection.query(`INSERT INTO nonworkingdays values(${schid},${request.NurseID},${i},${i + 1},${1},${request.IsMandatory})`,
+                        (err) => {
+                            if (err) {
+                                rollBackTransaction;
+                                res.status(500).send("Greška pri čuvanju izmena u bazi");
+                            }
+                        });
+                    i++;
+                }
+                else {
+                    db_connection.query(`INSERT INTO nonworkingdays values(${schid},${request.NurseID},${i},${i},${1},${request.IsMandatory})`,
+                        (err) => {
+                            if (err) {
+                                rollBackTransaction;
+                                res.status(500).send("Greška pri čuvanju izmena u bazi");
+                            }
+                        });
+                }
             }
-        });
+            else {
+                workDays++;
+            }
+        }
+        if (workDays > 0) {
+            db_connection.query(`INSERT INTO nonworkingdays values(${schid},${request.NurseID},${request.DateUntil - workDays + 1},${request.DateUntil},${request.DayType},${request.IsMandatory})`,
+                (err) => {
+                    if (err) {
+                        rollBackTransaction;
+                        res.status(500).send("Greška pri čuvanju izmena u bazi");
+                    }
+                });
+        }
+    }
+    else {
+        db_connection.query(`INSERT INTO nonworkingdays values(${schid},${request.NurseID},${request.DateFrom},${request.DateUntil},${request.DayType},${request.IsMandatory})`,
+            (err) => {
+                if (err) {
+                    rollBackTransaction;
+                    res.status(500).send("Greška pri čuvanju izmena u bazi");
+                }
+            });
+    }
 }
 const addNonWorkingShifts = async (request, schid, res) => {
     request.Shifts.forEach((shift, index) => {
@@ -525,7 +575,7 @@ app.post('/requests/', async (req, res) => {
                         else {
                             schid = result[0].id;
 
-                            requests.days.forEach(async (request) => await addNonWorkingDays(request, schid, res));
+                            requests.days.forEach(async (request) => await addNonWorkingDays(request, schid, res, requests.schedule.Month));
                             requests.shifts.forEach(async (request) => await addNonWorkingShifts(request, schid, res));
                             requests.mustWork.forEach(async (request) => await addMustWorkShifts(request, schid, res));
                             requests.specialNeeds.forEach(async (request) => await addSpecialNeeds(request, schid, res));
