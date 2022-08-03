@@ -268,7 +268,45 @@ app.put('/shifts', (req, res) => {
     };
 
     edit.forEach((shift) => {
-        db_connection.query(`UPDATE shifts SET Name = '${shift.Name}', Duration = ${shift.Duration}, StrongIntensity = ${shift.StrongIntensity}, Symbol = '${shift.Symbol}' WHERE ShiftID = ${shift.ShiftID}`,
+        db_connection.query(`UPDATE shifts SET StrongIntensity = ${shift.StrongIntensity} WHERE ShiftID = ${shift.ShiftID}`,
+            (err) => {
+                if (err) {
+                    console.log(err);
+                    rollBackTransaction;
+                    res.status(500).send("Greška pri čuvanju izmena u bazi");
+                }
+            });
+    });
+
+    commitTransaction(), (err) => {
+        if (err)
+            res.status(500).send("Greška pri čuvanju izmena u bazi");
+    };
+
+    res.status(200).send("Uspešno sačuvano :)");
+})
+app.get('/patterns', (req, res) => {
+    db_connection.query("SELECT * FROM patterns", (err, result, fields) => {
+        if (err) {
+            res.status(500).send("Greška pri čitanju iz baze");
+        }
+        res.json(result);
+    });
+})
+app.put('/patterns', (req, res) => {
+    var edit = req.body;
+
+    if (checkIfRequestEmpty(edit) || edit.length <= 0) {
+        res.status(400).send("Neispravno uneti podaci");
+    }
+
+    beginTransaction(), (err) => {
+        if (err)
+            res.status(500).send("Greška pri unosu podataka u bazu");
+    };
+
+    edit.forEach((pattern) => {
+        db_connection.query(`UPDATE patterns SET Name = '${pattern.Name}', Duration = ${pattern.Duration}, Symbol = '${pattern.Symbol}' WHERE PaternID = ${pattern.PaternID}`,
             (err) => {
                 if (err) {
                     console.log(err);
