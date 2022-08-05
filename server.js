@@ -8,8 +8,11 @@ var corsOptions = {
     origin: 'http://example.com',
     optionsSuccessStatus: 200 // some legacy browsers (IE11, various SmartTVs) choke on 204
 }
+const open = require('open');
+
 
 var db_connection = require('./db_connection');
+const connection = require("./db_connection");
 
 const PORT = process.env.PORT || 3001;
 
@@ -591,4 +594,135 @@ app.post('/requests/', async (req, res) => {
         })
 
 });
+app.get('/schedules', async (req, res) => {
+    db_connection.query("SELECT * FROM schedules",
+        (err, result, fields) => {
+            if (err) {
+                res.status(500).send("Greška pri čitanju iz baze");
+            }
+            else {
+                res.json(result);
+            }
+        })
+})
+app.get('/schedules/:id', async (req, res) => {
+    db_connection.query(`SELECT * FROM schedules WHERE ScheduleID = ${req.params.id}`,
+        (err, result, fields) => {
+            if (err) {
+                res.status(500).send("Greška pri čitanju iz baze");
+            }
+            else {
+                var data = Object.values(JSON.parse(JSON.stringify(result)))[0];
+                db_connection.query(`SELECT a.NurseID, n.Name, n.Surname, a.Day, p.Symbol, p.Duration FROM assignements a ` +
+                    `JOIN nurses n on (a.NurseID = n.NurseID) JOIN Patterns p on (a.PatternID = p.PatternID) WHERE a.ScheduleID = ${req.params.id} order by a.NurseID, a.Day;`,
+                    (err, result, fields) => {
+                        if (err) {
+                            res.status(500).send("Greška pri čitanju iz baze");
+                        }
+                        else {
+                            var assignedDays = Object.values(JSON.parse(JSON.stringify(result)));
+                            db_connection.query(`SELECT nwd.NurseID,  n.Name, n.Surname, nwd.DateFrom, nwd.DateUntil, nwdt.Symbol, nwdt.NumberOfHours FROM nonworkingdays nwd`
+                                + ` JOIN nonworkingdaytypes nwdt ON (nwd.NonWorkingDayTypeID = nwdt.NonWorkingDayTypeID) JOIN nurses n ON (nwd.NurseID = n.NurseID)`
+                                + ` WHERE ScheduleID = ${req.params.id} order by n.NurseID, nwd.DateFrom;`,
+                                (err, result, fields) => {
+                                    if (err) {
+                                        res.status(500).send("Greška pri čitanju iz baze");
+                                    }
+                                    else {
+                                        var nonWorkingDays = Object.values(JSON.parse(JSON.stringify(result)));
+                                        var nonWorkingDaysFormatted = [];
+                                        nonWorkingDays.forEach((nwd) => {
+                                            for (let p = nwd.DateFrom; p <= nwd.DateUntil; p++) {
+                                                nonWorkingDaysFormatted.push({
+                                                    NurseID: nwd.NurseID,
+                                                    Name: nwd.Name,
+                                                    Surname: nwd.Surname,
+                                                    Day: p,
+                                                    Symbol: nwd.Symbol,
+                                                    Duration: nwd.NumberOfHours
+                                                });
+                                            }
+                                        });
 
+                                        var toFormat = [];
+
+                                        for (let p = 0; p < assignedDays.length; p++) {
+                                            var ad_nid = assignedDays[p].NurseID;
+                                            for (let q = 0; q < nonWorkingDaysFormatted.length; q++) {
+                                                if (assignedDays[p].NurseID === nonWorkingDaysFormatted[q].NurseID) {
+                                                    if (nonWorkingDaysFormatted[q].Day < assignedDays[p].Day) {
+                                                        toFormat.push(nonWorkingDaysFormatted[q]);
+                                                        nonWorkingDaysFormatted.splice(q, 1);
+                                                        q--;
+                                                    }
+                                                    else if (nonWorkingDaysFormatted[q].Day > assignedDays[p].Day) {
+                                                        toFormat.push(assignedDays[p]);
+                                                        assignedDays.splice(p, 1);
+                                                        q--;
+                                                    }
+                                                    else if (nonWorkingDaysFormatted[q].Day === assignedDays[p].Day) {
+                                                        toFormat.push(assignedDays[p]);
+                                                        assignedDays.splice(p, 1);
+                                                        nonWorkingDaysFormatted.splice(q, 1);
+                                                        q--;
+                                                    }
+                                                }
+                                                else {
+                                                    break;
+                                                }
+                                            }
+                                            while (assignedDays.length > 0 && assignedDays[p].NurseID === ad_nid) {
+                                                toFormat.push(assignedDays[p]);
+                                                assignedDays.splice(p, 1);
+                                            }
+                                            var v = 0;
+                                            while (nonWorkingDaysFormatted.length > 0 && nonWorkingDaysFormatted[v].NurseID === ad_nid) {
+                                                toFormat.push(nonWorkingDaysFormatted[v]);
+                                                nonWorkingDaysFormatted.splice(v, 1);
+                                            }
+                                            p--;
+                                        }
+
+                                        for (let q = 0; q < nonWorkingDaysFormatted.length; q++) {
+                                            toFormat.push(nonWorkingDaysFormatted[q]);
+                                            nonWorkingDaysFormatted.splice(q, 1);
+                                        }
+
+                                        var nid = toFormat[0].NurseID;
+                                        var final = [];
+                                        var j = 0;
+
+                                        for (let i = 0; i < toFormat.length; i++) {
+                                            if (i === 0 || nid !== toFormat[i].NurseID) {
+                                                nid = toFormat[i].NurseID;
+
+                                                final.push({
+                                                    NurseID: nid,
+                                                    NurseName: toFormat[i].Name + " " + toFormat[i].Surname,
+                                                    Days: [{
+                                                        Day: toFormat[i].Day,
+                                                        Symbol: toFormat[i].Symbol
+                                                    }]
+                                                });
+                                                j++;
+                                            }
+                                            else {
+                                                final[j - 1].Days.push({
+                                                    Day: toFormat[i].Day,
+                                                    Symbol: toFormat[i].Symbol
+                                                })
+                                            }
+                                        }
+                                        data.NursesAndDays = final;
+                                        res.json(data);
+                                    }
+                                })
+                        }
+                    })
+            }
+        })
+})
+app.get('/test', async (req, res) => {
+    var p = await open(process.env.AMPL_LOC);
+    res.status(200).send();
+})
