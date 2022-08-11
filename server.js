@@ -10,7 +10,6 @@ var corsOptions = {
 }
 const open = require('open');
 
-
 var db_connection = require('./db_connection');
 const connection = require("./db_connection");
 
@@ -57,18 +56,9 @@ const addNonWorkingDays = async (request, schid, res, month) => {
                         }
                     });
                 workDays = 0;
-                if (i + 1 <= request.DateUntil) {
-                    db_connection.query(`INSERT INTO nonworkingdays values(${schid},${request.NurseID},${i},${i + 1},${1},${request.IsMandatory})`,
-                        (err) => {
-                            if (err) {
-                                rollBackTransaction;
-                                res.status(500).send("Greška pri čuvanju izmena u bazi");
-                            }
-                        });
-                    i++;
-                }
-                else {
-                    db_connection.query(`INSERT INTO nonworkingdays values(${schid},${request.NurseID},${i},${i},${1},${request.IsMandatory})`,
+
+                for (let j = 1; j <= 3; j++) {
+                    db_connection.query(`INSERT INTO nonworkingshifts values(${schid},${request.NurseID},${i},${i + 1 <= request.DateUntil ? i + 1 : i},${j},${request.IsMandatory})`,
                         (err) => {
                             if (err) {
                                 rollBackTransaction;
@@ -76,6 +66,7 @@ const addNonWorkingDays = async (request, schid, res, month) => {
                             }
                         });
                 }
+                if (i + 1 <= request.DateUntil) i++;
             }
             else {
                 workDays++;
@@ -726,3 +717,24 @@ app.get('/test', async (req, res) => {
     var p = await open(process.env.AMPL_LOC);
     res.status(200).send();
 })
+
+// app.post('/fill', async (req, res) => {
+//     beginTransaction(), (err) => {
+//         if (err)
+//             res.status(500).send("Greška pri unosu podataka u bazu");
+//     };
+//     for (let i = 1; i <= 27; i++) {
+//         for (let j = 1; j <= 7; j++) {
+//             db_connection.query(`insert into nurses_sequencerules values (${j},${i})`,
+//                 (err, result) => {
+//                     if (err)
+//                         console.log(err);
+//                 })
+//         }
+//     }
+//     commitTransaction(), (err) => {
+//         if (err)
+//             res.status(500).send("Greška pri unosu podataka u bazu");
+//     };
+//     res.status(200).send("Uspešno sačuvano");
+// })
