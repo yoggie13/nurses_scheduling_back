@@ -692,7 +692,8 @@ app.get('/schedules/:id', async (req, res) => {
                                                     NurseName: toFormat[i].Name + " " + toFormat[i].Surname,
                                                     Days: [{
                                                         Day: toFormat[i].Day,
-                                                        Symbol: toFormat[i].Symbol
+                                                        Symbol: toFormat[i].Symbol,
+                                                        Duration: toFormat[i].Duration
                                                     }]
                                                 });
                                                 j++;
@@ -700,7 +701,8 @@ app.get('/schedules/:id', async (req, res) => {
                                             else {
                                                 final[j - 1].Days.push({
                                                     Day: toFormat[i].Day,
-                                                    Symbol: toFormat[i].Symbol
+                                                    Symbol: toFormat[i].Symbol,
+                                                    Duration: toFormat[i].Duration
                                                 })
                                             }
                                         }
@@ -712,6 +714,42 @@ app.get('/schedules/:id', async (req, res) => {
                     })
             }
         })
+})
+app.post('/schedules/:id', async (req, res) => {
+    beginTransaction(), (err) => {
+        if (err)
+            res.status(500).send("Greška pri unosu podataka u bazu");
+    };
+
+    db_connection.query("SET SQL_SAFE_UPDATES = 0;", (err, result) => {
+        if (err) {
+            res.status(500).send(err);
+        }
+        else {
+            db_connection.query("update schedules set Chosen = b'0' where Month in" +
+                "(select Month from " +
+                `        (select Month from schedules where ScheduleID = ${req.params.id}) as m` +
+                "   );", (err, result) => {
+                    if (err) {
+                        res.status(500).send(err);
+                    }
+                    else {
+                        db_connection.query(`update schedules set Chosen = b'1' where ScheduleID = ${req.params.id}`,
+                            (err, result) => {
+                                if (err) {
+                                    res.status(500).send(err);
+                                } else {
+                                    commitTransaction(), (err) => {
+                                        if (err)
+                                            res.status(500).send("Greška pri unosu podataka u bazu");
+                                    };
+                                    res.status(200).send("Uspešno sačuvano");
+                                }
+                            })
+                    }
+                })
+        }
+    })
 })
 app.get('/test', async (req, res) => {
     var p = await open(process.env.AMPL_LOC);
@@ -725,7 +763,7 @@ app.get('/test', async (req, res) => {
 //     };
 //     for (let i = 1; i <= 27; i++) {
 //         for (let j = 1; j <= 7; j++) {
-//             db_connection.query(`insert into nurses_sequencerules values (${j},${i})`,
+//             db_connection.query(`insert into nurses_sequencerules values(${ j }, ${ i })`,
 //                 (err, result) => {
 //                     if (err)
 //                         console.log(err);
