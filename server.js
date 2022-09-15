@@ -545,6 +545,7 @@ app.post('/requests/', async (req, res) => {
 
     var NumberOfDays = new Date(date.getFullYear(), requests.schedule.Month, 0).getDate();
     var WorkingDays = 0;
+    var Year = date.getFullYear();
 
     for (let i = 1; i <= NumberOfDays; i++) {
         var day = new Date(date.getFullYear(), requests.schedule.Month, i).getDay();
@@ -552,8 +553,8 @@ app.post('/requests/', async (req, res) => {
             WorkingDays++;
     }
 
-    db_connection.query(`INSERT INTO schedules (GeneratedOn, Name, Month, NumberOfDays, WorkingDays) VALUES`
-        + `('${new Date(Date.now()).toJSON().slice(0, 10)}', '${requests.schedule.Name}', ${requests.schedule.Month}, ${NumberOfDays}, ${WorkingDays})`,
+    db_connection.query(`INSERT INTO schedules (GeneratedOn, Name, Month, Year, NumberOfDays, WorkingDays) VALUES`
+        + `('${new Date(Date.now()).toJSON().slice(0, 10)}', '${requests.schedule.Name}', ${requests.schedule.Month}, ${Year}, ${NumberOfDays}, ${WorkingDays})`,
         (err) => {
             if (err) {
                 rollBackTransaction();
