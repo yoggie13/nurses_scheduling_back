@@ -178,7 +178,7 @@ app.put('/nurses/delete', (req, res) => {
             res.status(500).send("Greška pri unosu podataka u bazu");
     };
     nurses.forEach((nurse) => {
-        db_connection.query(`DELETE FROM nurses WHERE NurseID = ${nurse}`, (err) => {
+        db_connection.query(`UPDATE nurses SET Active=0 WHERE NurseID = ${nurse}`, (err) => {
             if (err) {
                 rollBackTransaction;
                 res.status(500).send("Greška pri unosu podataka u bazu");
@@ -367,8 +367,8 @@ app.put('/patterns', (req, res) => {
 
     res.status(200).send("Uspešno sačuvano :)");
 })
-app.delete('/sequencerules/:id', (req, res) => {
-    db_connection.query(`DELETE FROM sequencerules WHERE SequenceRuleID = ${req.params.id}`, (err, result, fields) => {
+app.put('/sequencerules/:id', (req, res) => {
+    db_connection.query(`UPDATE sequencerules SET Active = 0 WHERE SequenceRuleID = ${req.params.id}`, (err, result, fields) => {
         if (err) {
             res.status(500).send("Greška pri brisanju")
             return;
@@ -478,8 +478,8 @@ app.get('/groupingrules/:id/nurses', (req, res) => {
         }
     })
 })
-app.delete('/groupingrules/:id', (req, res) => {
-    db_connection.query(`DELETE FROM groupingrules WHERE GroupingRuleID = ${req.params.id}`, (err, result, fields) => {
+app.put('/groupingrules/:id', (req, res) => {
+    db_connection.query(`UPDATE groupingrules SET Active = 0 WHERE GroupingRuleID = ${req.params.id}`, (err, result, fields) => {
         if (err) {
             res.status(500).send("Greška pri brisanju")
             return;
