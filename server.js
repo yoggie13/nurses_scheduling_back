@@ -462,8 +462,7 @@ app.post("/nonworkingdaytypes", (req, res) => {
     (err) => {
       if (err) res.status(500).send("Greška pri čuvanju izmena u bazi");
     };
-    res.status(200).send("Uspešno sačuvano :)");
-
+  res.status(200).send("Uspešno sačuvano :)");
 });
 app.put("/sequencerules/:id", (req, res) => {
   db_connection.query(
