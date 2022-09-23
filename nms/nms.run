@@ -1,14 +1,15 @@
 model "nms/nms.mod";
-param connectionString symbolic = "DRIVER={MySQL ODBC 8.0 Unicode Driver};SERVER=localhost;PORT=3306;USER=yoggie13;PASSWORD=Mmjesuper.13;DATABASE=nurseschedulingdb;";
+param connectionString symbolic = "DRIVER={MySQL ODBC 8.0 Unicode Driver};SERVER=localhost;PORT=3306;USER=root;PASSWORD=mmjesuper.13;DATABASE=nurses_scheduling;";
 option solver gurobi;
 #option gurobi_options "timelim=30";
 option gurobi_options "outlev=1";
 
-table nurses "ODBC" (connectionString) "nurses":
+table nurses "ODBC" (connectionString) "nurses"
+	"SQL=SELECT NurseID FROM nurses WHERE Active = 1":
 	N <- [NurseID];
 	
 table experienced_nurses "ODBC" (connectionString) "nurses"
-	"SQL=SELECT NurseID FROM nurses WHERE Experienced = 1":
+	"SQL=SELECT NurseID FROM nurses WHERE Experienced = 1 AND Active = 1":
 	NE <- [NurseID];
 	
 table shifts "ODBC" (connectionString) "shifts"
@@ -37,7 +38,8 @@ table days "ODBC" (connectionString) "schedules"
 
 table sequence_rules "ODBC" (connectionString) "sequencerules"
 	("SQL=select srm.SequenceRuleID, count(1) as ts from sequencerules sr "
-	& "join sequencerulesmembers srm on (sr.SequenceRuleID = srm.SequenceRuleMemberID) " 
+	& "join sequencerulesmembers srm on (sr.SequenceRuleID = srm.SequenceRuleMemberID) "
+	& "where Active = 1 " 
 	& "group by srm.SequenceRuleID"):
 	RS <- [SequenceRuleID], ts;
 
@@ -52,7 +54,7 @@ table nurses_sr "ODBC" (connectionString) "sequencerulemembers"
 	NS_tuples <- [SequenceRuleID, NurseID];
 
 table groupingrules "ODBC" (connectionString) "groupingrules"
-	"SQL=select * from groupingrules":
+	"SQL=select * from groupingrules where Active = 1":
 	RG <- [GroupingRuleID], prg ~ PatternID, tg ~ Duration, nug ~ Max;
 
 table groupingrulesnurses "ODBC" (connectionString) "nurses_groupingrules"
@@ -104,7 +106,7 @@ table params "ODBC" (connectionString) "parameters"
 	PAR <- [ParameterID], nu ~ Number;
 	
 table prev_sched "ODBC" (connectionString) "assignements"
-	("SQL=SELECT a.NurseID, a.Day - s.NumberOfDays as Day, a.PatternID FROM nurseschedulingdb.assignements a"
+	("SQL=SELECT a.NurseID, a.Day - s.NumberOfDays as Day, a.PatternID FROM assignements a"
 	& " join schedules s on (a.ScheduleID = s.ScheduleID)"
 	& " where s.Month = " & month[member(1,SCH)]-1
 	& " and s.Year = " & year[member(1,SCH)]
@@ -148,7 +150,6 @@ for {n in N}{
 		if x[n,d,p] = 1 then let pat_assign[member(1,SCH),n,d] := p;
 	}
 }
-
 
 param sch_id := member(1,SCH);
 

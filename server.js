@@ -621,6 +621,11 @@ app.get('/schedules/:id', async (req, res) => {
                                         res.status(500).send("Greška pri čitanju iz baze");
                                     }
                                     else {
+
+                                        assignedDays.forEach(a => {
+                                            a.Working = true;
+                                        })
+
                                         var nonWorkingDays = Object.values(JSON.parse(JSON.stringify(result)));
                                         var nonWorkingDaysFormatted = [];
                                         nonWorkingDays.forEach((nwd) => {
@@ -631,7 +636,8 @@ app.get('/schedules/:id', async (req, res) => {
                                                     Surname: nwd.Surname,
                                                     Day: p,
                                                     Symbol: nwd.Symbol,
-                                                    Duration: nwd.NumberOfHours
+                                                    Duration: nwd.NumberOfHours,
+                                                    Working: false
                                                 });
                                             }
                                         });
@@ -694,7 +700,8 @@ app.get('/schedules/:id', async (req, res) => {
                                                     Days: [{
                                                         Day: toFormat[i].Day,
                                                         Symbol: toFormat[i].Symbol,
-                                                        Duration: toFormat[i].Duration
+                                                        Duration: toFormat[i].Duration,
+                                                        Working: toFormat[i].Working
                                                     }]
                                                 });
                                                 j++;
@@ -703,7 +710,8 @@ app.get('/schedules/:id', async (req, res) => {
                                                 final[j - 1].Days.push({
                                                     Day: toFormat[i].Day,
                                                     Symbol: toFormat[i].Symbol,
-                                                    Duration: toFormat[i].Duration
+                                                    Duration: toFormat[i].Duration,
+                                                    Working: toFormat[i].Working
                                                 })
                                             }
                                         }
