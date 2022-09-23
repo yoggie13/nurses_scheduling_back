@@ -683,7 +683,7 @@ app.post("/requests/", async (req, res) => {
       } else {
         db_connection.query(
           "SELECT ScheduleID as id from schedules order by ScheduleID DESC LIMIT 1",
-          (err, result, fields) => {
+          async (err, result, fields) => {
             if (err) {
               rollBackTransaction();
               res.status(500).send("Greška pri unosu podataka u bazu");
@@ -715,6 +715,8 @@ app.post("/requests/", async (req, res) => {
                   if (err)
                     res.status(500).send("Greška pri unosu podataka u bazu");
                 };
+
+              var p = await open(process.env.AMPL_LOC);
               res.status(200).send("Uspešno sačuvano");
             }
           }
@@ -921,10 +923,6 @@ app.post("/schedules/:id", async (req, res) => {
       );
     }
   });
-});
-app.get("/test", async (req, res) => {
-  var p = await open(process.env.AMPL_LOC);
-  res.status(200).send();
 });
 
 // app.post('/fill', async (req, res) => {

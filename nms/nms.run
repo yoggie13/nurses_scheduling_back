@@ -62,7 +62,7 @@ table groupingrulesnurses "ODBC" (connectionString) "nurses_groupingrules"
 	NR_tuples <- [GroupingRuleID, NurseID];
 	
 table dntable "ODBC" (connectionString) "nonworkingdaytypes"
-	"SQL=select NumberOfHours from nonworkingdaytypes":
+	"SQL=select NumberOfHours from nonworkingdaytypes where Active = 1":
 	DN <- [NumberOfHours];
 
 table nurse_vac "ODBC" (connectionString) "nonworkingdays"
