@@ -893,7 +893,7 @@ app.post("/schedules/:id", async (req, res) => {
       res.status(500).send(err);
     } else {
       db_connection.query(
-        "update schedules set Chosen = b'0' where Month in" +
+        "update schedules set Chosen = 0 where Month in" +
           "(select Month from " +
           `        (select Month from schedules where ScheduleID = ${req.params.id}) as m` +
           "   );",
@@ -902,7 +902,7 @@ app.post("/schedules/:id", async (req, res) => {
             res.status(500).send(err);
           } else {
             db_connection.query(
-              `update schedules set Chosen = b'1' where ScheduleID = ${req.params.id}`,
+              `update schedules set Chosen = 1 where ScheduleID = ${req.params.id}`,
               (err, result) => {
                 if (err) {
                   res.status(500).send(err);
