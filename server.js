@@ -22,10 +22,8 @@ app.use(cors());
 
 const checkIfRequestEmpty = (req) => {
   return (
-    req === undefined ||
-    req === null ||
-    Object.keys(req).length === 0 ||
-    Object.getPrototypeOf(req) === Object.prototype
+    req === undefined || req === null || Object.keys(req).length === 0
+    // Object.getPrototypeOf(req) === Object.prototype
   );
 };
 const beginTransaction = () => {
@@ -418,6 +416,23 @@ app.get("/nonworkingdaytypes", (req, res) => {
       if (err) {
         res.status(500).send("Greška pri čitanju iz baze");
       } else res.json(result);
+    }
+  );
+});
+app.put("/nonworkingdaytypes", (req, res) => {
+  var insert = req.body;
+  if (checkIfRequestEmpty(insert)) {
+    res.status(400).send("Neispravno uneti podaci");
+    return;
+  }
+  db_connection.query(
+    "insert into nonworkingdaytypes (Name, Symbol, NumberOfHours) values (" +
+      `'${insert.Name}','${insert.Symbol}',${parseFloat(
+        insert.NumberOfHours
+      )})`,
+    (err) => {
+      if (err) res.status(500).send("Greška pri čuvanju");
+      else res.send("Uspešno čuvanje");
     }
   );
 });
