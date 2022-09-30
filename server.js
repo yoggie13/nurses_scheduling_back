@@ -177,7 +177,7 @@ app.get("/nursesForSelect", (req, res) => {
 });
 app.get("/daysForSelect", (req, res) => {
   db_connection.query(
-    "SELECT * FROM nonworkingdaytypes",
+    "SELECT * FROM nonworkingdaytypes where Active = 1",
     (err, result, fields) => {
       if (err) {
         res.status(400).send("Greška pri učitavanju podataka iz baze");
@@ -313,7 +313,7 @@ app.put("/parameters", (req, res) => {
 
   edit.forEach((param) => {
     db_connection.query(
-      `UPDATE parameters SET Name = '${param.Name}', Number = ${param.Number} WHERE ParameterID = ${param.ParameterID}`,
+      `UPDATE parameters SET Name = '${param.Name}', Number = ${param.Number} WHERE ParameterID = '${param.ParameterID}'`,
       (err) => {
         if (err) {
           rollBackTransaction;
