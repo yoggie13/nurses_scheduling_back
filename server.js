@@ -246,7 +246,7 @@ app.put("/nurses", (req, res) => {
 
   edit.forEach((nurse) => {
     db_connection.query(
-      `UPDATE nurses SET Name = '${nurse.Name}', Surname = '${nurse.Surname}', Experienced = ${nurse.Experienced} WHERE NurseID = ${nurse.NurseID}`,
+      `UPDATE nurses SET Name = '${nurse.Name}', Surname = '${nurse.Surname}', Experienced = ${nurse.Experienced}, Main = ${nurse.Main} WHERE NurseID = ${nurse.NurseID}`,
       (err) => {
         if (err) {
           rollBackTransaction;
@@ -276,7 +276,7 @@ app.post("/nurses", (req, res) => {
     };
   nurses.forEach((nurse) => {
     db_connection.query(
-      `INSERT INTO nurses (name, surname, experienced) value("${nurse.Name}", "${nurse.Surname}", ${nurse.Experienced})`,
+      `INSERT INTO nurses (Name, Surname, Experienced, Main) value("${nurse.Name}", "${nurse.Surname}", ${nurse.Experienced})`,
       (err) => {
         if (err) {
           rollBackTransaction;
