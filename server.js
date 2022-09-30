@@ -532,6 +532,46 @@ app.get("/sequencerules", (req, res) => {
     }
   );
 });
+app.get("/sequencerules/:id/nurses/", (req, res) => {
+  db_connection.query(
+    `SELECT n.NurseID, n.Name, n.Surname from nurses_sequencerules ns JOIN nurses n on (ns.NurseID = n.NurseID) WHERE ns.SequenceRuleID = ${req.params.id}`,
+    (err, result, fields) => {
+      if (err) {
+        res.status(500).send("Greška pri čitanju podataka iz baze");
+        return;
+      } else {
+        res.json(result);
+      }
+    }
+  );
+});
+app.post("/sequencerules/:srid/nurses/:nid", (req, res) => {
+  db_connection.query(
+    `INSERT INTO nurses_sequencerules values(${req.params.srid},${req.params.nid})`,
+    (err, result, fields) => {
+      if (err) {
+        res.status(500).send("Greška pri čitanju podataka iz baze");
+        return;
+      } else {
+        res.json(result);
+      }
+    }
+  );
+});
+app.delete("/sequencerules/:grid/nurses/:nid", (req, res) => {
+  db_connection.query(
+    `DELETE from nurses_sequencerules WHERE SequenceRuleID = ${req.params.grid} AND NurseID =  ${req.params.nid}`,
+    (err, result, fields) => {
+      if (err) {
+        res.status(500).send("Greška pri čitanju podataka iz baze");
+        return;
+      } else {
+        res.json(result);
+      }
+    }
+  );
+});
+
 app.put("/groupingrules", (req, res) => {
   var edit = req.body;
 
