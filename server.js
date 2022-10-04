@@ -2,7 +2,7 @@ const dotenv = require("dotenv");
 dotenv.config();
 const { query } = require("express");
 const express = require("express");
-var mysql = require("mysql");
+const mysql = require("mysql2/promise");
 var cors = require("cors");
 var corsOptions = {
   origin: "http://example.com",
@@ -10,8 +10,16 @@ var corsOptions = {
 };
 const open = require("open");
 
-var db_connection = require("./db_connection");
-const connection = require("./db_connection");
+const connection = async () => {
+  return await mysql.createConnection({
+    host: process.env.DB_HOST,
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    database: process.env.DB_NAME,
+  });
+};
+
+const e = require("express");
 
 const PORT = process.env.PORT || 3001;
 
@@ -26,125 +34,205 @@ const checkIfRequestEmpty = (req) => {
     // Object.getPrototypeOf(req) === Object.prototype
   );
 };
-const beginTransaction = () => {
-  db_connection.query("START TRANSACTION", (err) => {
-    if (err) throw err;
-  });
+const startTransaction = async (db_connection) => {
+  await db_connection.query("START TRANSACTION");
 };
-const commitTransaction = () => {
-  db_connection.query("COMMIT", (err) => {
-    if (err) throw err;
-  });
+const commitTransaction = async (db_connection) => {
+  await db_connection.query("COMMIT;");
 };
-const rollBackTransaction = () => {
-  db_connection.query("ROLLBACK TRANSACTION", (err) => {
-    if (err) throw err;
-  });
+const rollBackTransaction = async (db_connection) => {
+  await db_connection.query("ROLLBACK TRANSACTION;");
 };
-const addNonWorkingDays = async (request, schid, res, month) => {
-  if (request.DayType === 2) {
-    var workDays = 0;
-    for (let i = request.DateFrom; i <= request.DateUntil; i++) {
-      var day = new Date(new Date().getFullYear(), month - 1, i).getDay();
-      if (day === 0 || day === 6) {
-        db_connection.query(
-          `INSERT INTO nonworkingdays values(${schid},${request.NurseID},${
-            i - workDays
-          },${i - 1},${request.DayType},${request.IsMandatory})`,
-          (err) => {
-            if (err) {
-              rollBackTransaction;
-              res.status(500).send("Greška pri čuvanju izmena u bazi");
-            }
-          }
-        );
-        workDays = 0;
 
-        for (let j = 1; j <= 3; j++) {
-          db_connection.query(
-            `INSERT INTO nonworkingshifts values(${schid},${
-              request.NurseID
-            },${i},${i + 1 <= request.DateUntil ? i + 1 : i},${j},${
-              request.IsMandatory
-            })`,
-            (err) => {
-              if (err) {
-                rollBackTransaction;
-                res.status(500).send("Greška pri čuvanju izmena u bazi");
-              }
-            }
-          );
+const addNonWorkingDays = async (request, schid, res, month, db_connection) => {
+  try {
+    if (request.DayType === 2) {
+      var rows = [];
+      for (let i = request.DateFrom; i <= request.DateUntil; i++) {
+        var row = {
+          ScheduleID: schid,
+          NurseID: request.NurseID,
+          IsMandatory: request.IsMandatory,
+        };
+        var day = new Date(new Date().getFullYear(), month - 1, i).getDay();
+        if (day === 0 || day === 6) {
+          row.DateFrom = i;
+          row.NonWorkingDayTypeID = 1;
+          if (day === 6 && i + 1 <= request.DateUntil) row.DateUntil = i + 1;
+          else row.DateUntil = i;
+        } else {
+          row.DateFrom = i;
+          row.NonWorkingDayTypeID = 2;
+          row.DateUntil = Math.min(request.DateUntil, i + 5 - day);
         }
-        if (i + 1 <= request.DateUntil) i++;
-      } else {
-        workDays++;
+        rows.push(row);
+        i = row.DateUntil;
       }
+      request = rows;
     }
-    if (workDays > 0) {
-      db_connection.query(
-        `INSERT INTO nonworkingdays values(${schid},${request.NurseID},${
-          request.DateUntil - workDays + 1
-        },${request.DateUntil},${request.DayType},${request.IsMandatory})`,
-        (err) => {
-          if (err) {
-            rollBackTransaction;
-            res.status(500).send("Greška pri čuvanju izmena u bazi");
-          }
-        }
+    await request.forEach(async (r) => {
+      await db_connection.query(
+        "insert into nonworkingdays values " +
+          `(${r.ScheduleID},${r.NurseID},${r.DateFrom},${r.DateUntil},${r.NonWorkingDayTypeID},${r.IsMandatory})`
       );
-    }
-  } else {
-    db_connection.query(
-      `INSERT INTO nonworkingdays values(${schid},${request.NurseID},${request.DateFrom},${request.DateUntil},${request.DayType},${request.IsMandatory})`,
-      (err) => {
-        if (err) {
-          rollBackTransaction;
-          res.status(500).send("Greška pri čuvanju izmena u bazi");
-        }
-      }
-    );
+    });
+  } catch (err) {
+    throw err;
   }
 };
-const addNonWorkingShifts = async (request, schid, res) => {
-  request.Shifts.forEach((shift, index) => {
-    if (shift) {
-      db_connection.query(
-        `INSERT INTO nonworkingshifts values(${schid},${request.NurseID},${
-          request.DateFrom
-        },${request.DateUntil},${index + 1},${request.IsMandatory})`,
-        (err) => {
-          if (err) {
-            rollBackTransaction;
-            res.status(500).send("Greška pri čuvanju izmena u bazi");
-          }
-        }
-      );
+const addNonWorkingShifts = async (request, schid, res, db_connection) => {
+  try {
+    await request.Shifts.forEach(async (shift, index) => {
+      if (shift) {
+        await db_connection.query(
+          `INSERT INTO nonworkingshifts values(${schid},${request.NurseID},${
+            request.DateFrom
+          },${request.DateUntil},${index + 1},${request.IsMandatory})`
+        );
+      }
+    });
+  } catch (err) {
+    throw err;
+  }
+};
+const addMustWorkShifts = async (request, schid, res, db_connection) => {
+  try {
+    await db_connection.query(
+      `INSERT INTO mustworkshifts values(${schid}, ${request.NurseID}, ${request.ShiftID}, ${request.DateFrom}, ${request.DateUntil})`
+    );
+  } catch (err) {
+    throw err;
+  }
+};
+const addSpecialNeeds = async (request, schid, res, db_connection) => {
+  try {
+    await db_connection.query(
+      `INSERT INTO specialneedsshifts values(${schid}, ${request.Day}, ${request.ShiftID}, ${request.NumberOfNurses})`
+    );
+  } catch (err) {
+    throw err;
+  }
+};
+const getAssignementsForSchedule = async (id, db_connection) => {
+  try {
+    const [result] = await db_connection.query(
+      `SELECT a.NurseID, n.Name, n.Surname, a.Day, p.Symbol, p.Duration FROM assignements a ` +
+        `JOIN nurses n on (a.NurseID = n.NurseID) JOIN Patterns p on (a.PatternID = p.PatternID) WHERE a.ScheduleID = ${id} order by a.NurseID, a.Day;`
+    );
+    return Object.values(JSON.parse(JSON.stringify(result)));
+  } catch (err) {
+    throw err;
+  }
+};
+const getNWDForSchedule = async (id, db_connection) => {
+  try {
+    const [result] = await db_connection.query(
+      `SELECT nwd.NurseID,  n.Name, n.Surname, nwd.DateFrom, nwd.DateUntil, nwdt.Symbol, nwdt.NumberOfHours FROM nonworkingdays nwd` +
+        ` JOIN nonworkingdaytypes nwdt ON (nwd.NonWorkingDayTypeID = nwdt.NonWorkingDayTypeID) JOIN nurses n ON (nwd.NurseID = n.NurseID)` +
+        ` WHERE ScheduleID = ${id} order by n.NurseID, nwd.DateFrom;`
+    );
+
+    return Object.values(JSON.parse(JSON.stringify(result)));
+  } catch (err) {
+    throw err;
+  }
+};
+const formatAssAndNwd = (assignedDays, nonWorkingDays) => {
+  assignedDays.forEach((a) => {
+    a.Working = true;
+  });
+
+  var nonWorkingDaysFormatted = [];
+  nonWorkingDays.forEach((nwd) => {
+    for (let p = nwd.DateFrom; p <= nwd.DateUntil; p++) {
+      nonWorkingDaysFormatted.push({
+        NurseID: nwd.NurseID,
+        Name: nwd.Name,
+        Surname: nwd.Surname,
+        Day: p,
+        Symbol: nwd.Symbol,
+        Duration: nwd.NumberOfHours,
+        Working: false,
+      });
     }
   });
-};
-const addMustWorkShifts = async (request, schid, res) => {
-  db_connection.query(
-    `INSERT INTO mustworkshifts values(${schid}, ${request.NurseID}, ${request.ShiftID}, ${request.DateFrom}, ${request.DateUntil})`,
-    (err) => {
-      if (err) {
-        rollBackTransaction;
-        res.status(500).send("Greška pri čuvanju izmena u bazi");
-      }
-    }
-  );
-};
-const addSpecialNeeds = async (request, schid, res) => {
-  db_connection.query(
-    `INSERT INTO specialneedsshifts values(${schid}, ${request.Day}, ${request.ShiftID}, ${request.NumberOfNurses})`,
-    (err) => {
-      if (err) {
-        rollBackTransaction;
-        res.status(500).send("Greška pri čuvanju izmena u bazi");
-      }
-    }
-  );
-};
 
+  var toFormat = [];
+
+  for (let p = 0; p < assignedDays.length; p++) {
+    var ad_nid = assignedDays[p].NurseID;
+    for (let q = 0; q < nonWorkingDaysFormatted.length; q++) {
+      if (assignedDays[p].NurseID === nonWorkingDaysFormatted[q].NurseID) {
+        if (nonWorkingDaysFormatted[q].Day < assignedDays[p].Day) {
+          toFormat.push(nonWorkingDaysFormatted[q]);
+          nonWorkingDaysFormatted.splice(q, 1);
+          q--;
+        } else if (nonWorkingDaysFormatted[q].Day > assignedDays[p].Day) {
+          toFormat.push(assignedDays[p]);
+          assignedDays.splice(p, 1);
+          q--;
+        } else if (nonWorkingDaysFormatted[q].Day === assignedDays[p].Day) {
+          toFormat.push(assignedDays[p]);
+          assignedDays.splice(p, 1);
+          nonWorkingDaysFormatted.splice(q, 1);
+          q--;
+        }
+      } else {
+        break;
+      }
+    }
+    while (assignedDays.length > 0 && assignedDays[p].NurseID === ad_nid) {
+      toFormat.push(assignedDays[p]);
+      assignedDays.splice(p, 1);
+    }
+    var v = 0;
+    while (
+      nonWorkingDaysFormatted.length > 0 &&
+      nonWorkingDaysFormatted[v].NurseID === ad_nid
+    ) {
+      toFormat.push(nonWorkingDaysFormatted[v]);
+      nonWorkingDaysFormatted.splice(v, 1);
+    }
+    p--;
+  }
+
+  for (let q = 0; q < nonWorkingDaysFormatted.length; q++) {
+    toFormat.push(nonWorkingDaysFormatted[q]);
+    nonWorkingDaysFormatted.splice(q, 1);
+  }
+
+  var nid = toFormat[0].NurseID;
+  var final = [];
+  var j = 0;
+
+  for (let i = 0; i < toFormat.length; i++) {
+    if (i === 0 || nid !== toFormat[i].NurseID) {
+      nid = toFormat[i].NurseID;
+
+      final.push({
+        NurseID: nid,
+        NurseName: toFormat[i].Name + " " + toFormat[i].Surname,
+        Days: [
+          {
+            Day: toFormat[i].Day,
+            Symbol: toFormat[i].Symbol,
+            Duration: toFormat[i].Duration,
+            Working: toFormat[i].Working,
+          },
+        ],
+      });
+      j++;
+    } else {
+      final[j - 1].Days.push({
+        Day: toFormat[i].Day,
+        Symbol: toFormat[i].Symbol,
+        Duration: toFormat[i].Duration,
+        Working: toFormat[i].Working,
+      });
+    }
+  }
+  return final;
+};
 app.use(
   express.urlencoded({
     extended: true,
@@ -157,556 +245,491 @@ app.listen(PORT, () => {
   console.log(`Server listening on ${PORT}`);
 });
 
-app.get("/nursesForSelect", (req, res) => {
-  db_connection.query(
-    "SELECT * FROM nurses  where Active = 1",
-    (err, result, fields) => {
-      if (err) {
-        res.status(400).send("Greška pri čitanju podataka iz baze");
-      }
-      var ret = [];
-      result.forEach((nurse) => {
-        ret.push({
-          id: nurse.NurseID,
-          label: `${nurse.Name} ${nurse.Surname}`,
-        });
+app.get("/nursesForSelect", async (req, res) => {
+  const db_connection = await connection();
+  try {
+    const [result] = await db_connection.query(
+      "SELECT * FROM nurses  where Active = 1"
+    );
+
+    var ret = [];
+    await result.forEach((nurse) => {
+      ret.push({
+        id: nurse.NurseID,
+        label: `${nurse.Name} ${nurse.Surname}`,
       });
-      res.json(ret);
-    }
-  );
+    });
+    res.json(ret);
+  } catch (err) {
+    res.status(400).send("Greška pri čitanju podataka iz baze");
+  } finally {
+    await db_connection.end();
+  }
 });
-app.get("/daysForSelect", (req, res) => {
-  db_connection.query(
-    "SELECT * FROM nonworkingdaytypes where Active = 1",
-    (err, result, fields) => {
-      if (err) {
-        res.status(400).send("Greška pri učitavanju podataka iz baze");
-      }
-      var ret = [];
-      result.forEach((day) => {
-        ret.push({
-          id: day.NonWorkingDayTypeID,
-          label: day.Name,
-        });
+app.get("/daysForSelect", async (req, res) => {
+  const db_connection = await connection();
+  try {
+    const [result] = await db_connection.execute(
+      "SELECT * FROM nonworkingdaytypes where Active = 1"
+    );
+    var ret = [];
+    await result.forEach((day) => {
+      ret.push({
+        id: day.NonWorkingDayTypeID,
+        label: day.Name,
       });
-      res.json(ret);
-    }
-  );
+    });
+    res.json(ret);
+  } catch (err) {
+    res.status(400).send("Greška pri učitavanju podataka iz baze");
+  } finally {
+    await db_connection.end();
+  }
 });
-app.put("/nurses/delete", (req, res) => {
+app.put("/nurses/delete", async (req, res) => {
   var nurses = req.body;
 
   if (checkIfRequestEmpty(nurses) || nurses.length <= 0) {
     res.status(400).send("Neispravno uneti podaci");
   }
 
-  beginTransaction(),
-    (err) => {
-      if (err) res.status(500).send("Greška pri unosu podataka u bazu");
-    };
-  nurses.forEach((nurse) => {
-    db_connection.query(
-      `UPDATE nurses SET Active=0 WHERE NurseID = ${nurse}`,
-      (err) => {
-        if (err) {
-          rollBackTransaction;
-          res.status(500).send("Greška pri unosu podataka u bazu");
-        }
-      }
+  const db_connection = await connection();
+  try {
+    await startTransaction(db_connection);
+    await nurses.forEach((nurse) => {
+      db_connection.query(
+        `UPDATE nurses SET Active=0 WHERE NurseID = ${nurse}`
+      );
+    });
+    await commitTransaction(db_connection);
+    res.status(200).send("Uspešno sačuvano :)");
+  } catch (err) {
+    await rollbackTransaction(db_connection);
+    res.status(500).send(err);
+  } finally {
+    await db_connection.end();
+  }
+});
+app.get("/nurses", async (req, res) => {
+  const db_connection = await connection();
+  try {
+    const [result] = await db_connection.query(
+      "SELECT * FROM nurses where Active = 1"
     );
-  });
-  commitTransaction(),
-    (err) => {
-      if (err) res.status(500).send("Greška pri unosu podataka u bazu");
-    };
-  res.status(200).send("Uspešno sačuvano :)");
+    res.json(result);
+  } catch (err) {
+    res.status(500).send(err);
+  }
 });
-app.get("/nurses", (req, res) => {
-  db_connection.query(
-    "SELECT * FROM nurses where Active = 1",
-    (err, result, fields) => {
-      if (err) {
-        res.status(500).send("Greška pri čitanju iz baze");
-      }
-      res.json(result);
-    }
-  );
-});
-app.put("/nurses", (req, res) => {
+app.put("/nurses", async (req, res) => {
   var edit = req.body;
 
   if (checkIfRequestEmpty(edit) || edit.length <= 0) {
     res.status(400).send("Neispravno uneti podaci");
   }
+  const db_connection = await connection();
+  try {
+    await startTransaction(db_connection);
 
-  beginTransaction(),
-    (err) => {
-      if (err) res.status(500).send("Greška pri unosu podataka u bazu");
-    };
+    await edit.forEach((nurse) => {
+      db_connection.query(
+        `UPDATE nurses SET Name = '${nurse.Name}', Surname = '${nurse.Surname}', Experienced = ${nurse.Experienced}, Main = ${nurse.Main} WHERE NurseID = ${nurse.NurseID}`
+      );
+    });
 
-  edit.forEach((nurse) => {
-    db_connection.query(
-      `UPDATE nurses SET Name = '${nurse.Name}', Surname = '${nurse.Surname}', Experienced = ${nurse.Experienced}, Main = ${nurse.Main} WHERE NurseID = ${nurse.NurseID}`,
-      (err) => {
-        if (err) {
-          rollBackTransaction;
-          res.status(500).send("Greška pri čuvanju izmena u bazi");
-        }
-      }
-    );
-  });
-
-  commitTransaction(),
-    (err) => {
-      if (err) res.status(500).send("Greška pri čuvanju izmena u bazi");
-    };
-
-  res.status(200).send("Uspešno sačuvano :)");
+    await commitTransaction(db_connection);
+    res.status(200).send("Uspešno sačuvano :)");
+  } catch {
+    rollBackTransaction;
+    res.status(500).send(err);
+  } finally {
+    await db_connection.end();
+  }
 });
-app.post("/nurses", (req, res) => {
+app.post("/nurses", async (req, res) => {
   var nurses = req.body;
 
   if (checkIfRequestEmpty(nurses) || nurses.length <= 0) {
     res.status(400).send("Neispravno uneti podaci");
   }
 
-  beginTransaction(),
-    (err) => {
-      if (err) res.status(500).send("Greška pri unosu podataka u bazu");
-    };
-  nurses.forEach((nurse) => {
-    db_connection.query(
-      `INSERT INTO nurses (Name, Surname, Experienced, Main) value("${nurse.Name}", "${nurse.Surname}", ${nurse.Experienced})`,
-      (err) => {
-        if (err) {
-          rollBackTransaction;
-          res.status(500).send("Greška pri unosu podataka u bazu");
-        }
-      }
-    );
-  });
-  commitTransaction(),
-    (err) => {
-      if (err) res.status(500).send("Greška pri unosu podataka u bazu");
-    };
-  res.status(200).send("Uspešno sačuvano :)");
+  const db_connection = await connection();
+  try {
+    await startTransaction(db_connection);
+    await nurses.forEach((nurse) => {
+      db_connection.query(
+        `INSERT INTO nurses (Name, Surname, Experienced, Main) value("${nurse.Name}", "${nurse.Surname}", ${nurse.Experienced})`
+      );
+    });
+    await commitTransaction(db_connection);
+    res.status(200).send("Uspešno sačuvano :)");
+  } catch (err) {
+    rollBackTransaction;
+    res.status(500).send(err);
+  } finally {
+    await db_connection.end();
+  }
 });
-app.get("/parameters", (req, res) => {
-  db_connection.query("SELECT * FROM parameters", (err, result, fields) => {
-    if (err) {
-      res.status(500).send("Greška pri čitanju iz baze");
-    }
+app.get("/parameters", async (req, res) => {
+  const db_connection = await connection();
+  try {
+    const [result] = await db_connection.query("SELECT * FROM parameters");
     res.json(result);
-  });
+  } catch (err) {
+    res.status(500).send(err);
+  } finally {
+    await db_connection.end();
+  }
 });
-app.put("/parameters", (req, res) => {
+app.put("/parameters", async (req, res) => {
   var edit = req.body;
 
   if (checkIfRequestEmpty(edit) || edit.length <= 0) {
     res.status(400).send("Neispravno uneti podaci");
   }
+  const db_connection = await connection();
+  try {
+    await edit.forEach((param) => {
+      db_connection.query(
+        `UPDATE parameters SET Name = '${param.Name}', Number = ${param.Number} WHERE ParameterID = '${param.ParameterID}'`
+      );
+    });
 
-  beginTransaction(),
-    (err) => {
-      if (err) res.status(500).send("Greška pri unosu podataka u bazu");
-    };
+    await commitTransaction(db_connection);
 
-  edit.forEach((param) => {
-    db_connection.query(
-      `UPDATE parameters SET Name = '${param.Name}', Number = ${param.Number} WHERE ParameterID = '${param.ParameterID}'`,
-      (err) => {
-        if (err) {
-          rollBackTransaction;
-          res.status(500).send("Greška pri čuvanju izmena u bazi");
-        }
-      }
-    );
-  });
-
-  commitTransaction(),
-    (err) => {
-      if (err) res.status(500).send("Greška pri čuvanju izmena u bazi");
-    };
-
-  res.status(200).send("Uspešno sačuvano :)");
+    res.status(200).send("Uspešno sačuvano :)");
+  } catch (err) {
+    rollBackTransaction;
+    res.status(500).send(err);
+  } finally {
+    await db_connection.end();
+  }
 });
-app.get("/shifts", (req, res) => {
-  db_connection.query("SELECT * FROM shifts", (err, result, fields) => {
-    if (err) {
-      res.status(500).send("Greška pri čitanju iz baze");
-    }
+app.get("/shifts", async (req, res) => {
+  const db_connection = await connection();
+  try {
+    const [result] = await db_connection.query("SELECT * FROM shifts");
     res.json(result);
-  });
+  } catch (err) {
+    res.status(500).send(err);
+  } finally {
+    await db_connection.end();
+  }
 });
-app.put("/shifts", (req, res) => {
+app.put("/shifts", async (req, res) => {
   var edit = req.body;
 
   if (checkIfRequestEmpty(edit) || edit.length <= 0) {
     res.status(400).send("Neispravno uneti podaci");
   }
+  const db_connection = await connection();
+  try {
+    await startTransaction(db_connection);
+    await edit.forEach((shift) => {
+      db_connection.query(
+        `UPDATE shifts SET StrongIntensity = ${shift.StrongIntensity} WHERE ShiftID = ${shift.ShiftID}`
+      );
+    });
 
-  beginTransaction(),
-    (err) => {
-      if (err) res.status(500).send("Greška pri unosu podataka u bazu");
-    };
+    await commitTransaction(db_connection);
 
-  edit.forEach((shift) => {
-    db_connection.query(
-      `UPDATE shifts SET StrongIntensity = ${shift.StrongIntensity} WHERE ShiftID = ${shift.ShiftID}`,
-      (err) => {
-        if (err) {
-          console.log(err);
-          rollBackTransaction;
-          res.status(500).send("Greška pri čuvanju izmena u bazi");
-        }
-      }
-    );
-  });
-
-  commitTransaction(),
-    (err) => {
-      if (err) res.status(500).send("Greška pri čuvanju izmena u bazi");
-    };
-
-  res.status(200).send("Uspešno sačuvano :)");
+    res.status(200).send("Uspešno sačuvano :)");
+  } catch (err) {
+    rollBackTransaction;
+    res.status(500).send(err);
+  } finally {
+    await db_connection.end();
+  }
 });
-app.get("/patterns", (req, res) => {
-  db_connection.query("SELECT * FROM patterns", (err, result, fields) => {
-    if (err) {
-      res.status(500).send("Greška pri čitanju iz baze");
-    } else res.json(result);
-  });
+app.get("/patterns", async (req, res) => {
+  const db_connection = await connection();
+  try {
+    const [result] = await db_connection.query("SELECT * FROM patterns");
+    res.json(result);
+  } catch (err) {
+    res.status(500).send(err);
+  } finally {
+    await db_connection.end();
+  }
 });
-app.put("/patterns", (req, res) => {
+app.put("/patterns", async (req, res) => {
   var edit = req.body;
 
   if (checkIfRequestEmpty(edit) || edit.length <= 0) {
     res.status(400).send("Neispravno uneti podaci");
   }
+  const db_connection = await connection();
+  try {
+    await startTransaction(db_connection);
 
-  beginTransaction(),
-    (err) => {
-      if (err) res.status(500).send("Greška pri unosu podataka u bazu");
-    };
+    await edit.forEach((pattern) => {
+      db_connection.query(
+        `UPDATE patterns SET Name = '${pattern.Name}', Duration = ${pattern.Duration}, Symbol = '${pattern.Symbol}' WHERE PatternID = ${pattern.PatternID}`
+      );
+    });
 
-  edit.forEach((pattern) => {
-    db_connection.query(
-      `UPDATE patterns SET Name = '${pattern.Name}', Duration = ${pattern.Duration}, Symbol = '${pattern.Symbol}' WHERE PaternID = ${pattern.PaternID}`,
-      (err) => {
-        if (err) {
-          console.log(err);
-          rollBackTransaction;
-          res.status(500).send("Greška pri čuvanju izmena u bazi");
-        }
-      }
+    await commitTransaction(db_connection);
+    res.status(200).send("Uspešno sačuvano :)");
+  } catch (err) {
+    rollBackTransaction;
+    res.status(500).send(err);
+  } finally {
+    await db_connection.end();
+  }
+});
+app.get("/nonworkingdaytypes", async (req, res) => {
+  const db_connection = await connection();
+  try {
+    const [result] = await db_connection.query(
+      "select * from nonworkingdaytypes where Active = 1"
     );
-  });
-
-  commitTransaction(),
-    (err) => {
-      if (err) res.status(500).send("Greška pri čuvanju izmena u bazi");
-    };
-
-  res.status(200).send("Uspešno sačuvano :)");
+    res.json(result);
+  } catch (err) {
+    res.status(500).send(err);
+  } finally {
+    await db_connection.end();
+  }
 });
-app.get("/nonworkingdaytypes", (req, res) => {
-  db_connection.query(
-    "select * from nonworkingdaytypes where Active = 1",
-    (err, result) => {
-      if (err) {
-        res.status(500).send("Greška pri čitanju iz baze");
-      } else res.json(result);
-    }
-  );
-});
-app.put("/nonworkingdaytypes", (req, res) => {
+app.put("/nonworkingdaytypes", async (req, res) => {
   var insert = req.body;
   if (checkIfRequestEmpty(insert)) {
     res.status(400).send("Neispravno uneti podaci");
     return;
   }
-  db_connection.query(
-    "insert into nonworkingdaytypes (Name, Symbol, NumberOfHours) values (" +
-      `'${insert.Name}','${insert.Symbol}',${parseFloat(
-        insert.NumberOfHours
-      )})`,
-    (err) => {
-      if (err) res.status(500).send("Greška pri čuvanju");
-      else res.send("Uspešno čuvanje");
-    }
-  );
+  const db_connection = await connection();
+  try {
+    await db_connection.query(
+      "insert into nonworkingdaytypes (Name, Symbol, NumberOfHours) values (" +
+        `'${insert.Name}','${insert.Symbol}',${parseFloat(
+          insert.NumberOfHours
+        )})`
+    );
+    res.send("Uspešno čuvanje");
+  } catch (err) {
+    res.status(500).send(err);
+  } finally {
+    await db_connection.end();
+  }
 });
-app.post("/nonworkingdaytypes/:id", (req, res) => {
-  db_connection.query(
-    `UPDATE nonworkingdaytypes SET Active = 0 WHERE NonWorkingDayTypeID = ${req.params.id}`,
-    (err, result, fields) => {
-      if (err) {
-        res.status(500).send("Greška pri brisanju");
-        return;
-      } else {
-        res.send("Uspešno izbrisano");
-      }
-    }
-  );
+app.post("/nonworkingdaytypes/:id", async (req, res) => {
+  const db_connection = await connection();
+  try {
+    await db_connection.query(
+      `UPDATE nonworkingdaytypes SET Active = 0 WHERE NonWorkingDayTypeID = ${req.params.id}`
+    );
+    res.send("Uspesno izbrisano");
+  } catch (err) {
+    res.status(500).send(err);
+  } finally {
+    await db_connection.end();
+  }
 });
-app.post("/nonworkingdaytypes", (req, res) => {
+app.post("/nonworkingdaytypes", async (req, res) => {
   var edit = req.body;
 
   if (checkIfRequestEmpty(edit) || edit.length <= 0) {
     res.status(400).send("Neispravno uneti podaci");
   }
+  const db_connection = await connection();
+  try {
+    await startTransaction(db_connection);
+    await edit.forEach((param) => {
+      db_connection.query(
+        `UPDATE nonworkingdaytypes SET Name = '${param.Name}', Symbol = '${param.Symbol}', NumberOfHours = ${param.NumberOfHours} WHERE NonWorkingDayTypeID = ${param.NonWorkingDayTypeID}`
+      );
+    });
 
-  beginTransaction(),
-    (err) => {
-      if (err) res.status(500).send("Greška pri unosu podataka u bazu");
-    };
-
-  edit.forEach((param) => {
-    db_connection.query(
-      `UPDATE nonworkingdaytypes SET Name = '${param.Name}', Symbol = '${param.Symbol}', NumberOfHours = ${param.NumberOfHours} WHERE NonWorkingDayTypeID = ${param.NonWorkingDayTypeID}`,
-      (err) => {
-        if (err) {
-          rollBackTransaction;
-          res.status(500).send("Greška pri čuvanju izmena u bazi");
-        }
-      }
+    await commitTransaction(db_connection);
+    res.status(200).send("Uspešno sačuvano :)");
+  } catch (err) {
+    rollBackTransaction;
+    res.status(500).send(err);
+  } finally {
+    await db_connection.end();
+  }
+});
+app.put("/sequencerules/:id", async (req, res) => {
+  const db_connection = await connection();
+  try {
+    await db_connection.query(
+      `UPDATE sequencerules SET Active = 0 WHERE SequenceRuleID = ${req.params.id}`
     );
-  });
-
-  commitTransaction(),
-    (err) => {
-      if (err) res.status(500).send("Greška pri čuvanju izmena u bazi");
-    };
-  res.status(200).send("Uspešno sačuvano :)");
+  } catch (err) {
+    res.status(500).send(err);
+  } finally {
+    await db_connection.end();
+  }
 });
-app.put("/sequencerules/:id", (req, res) => {
-  db_connection.query(
-    `UPDATE sequencerules SET Active = 0 WHERE SequenceRuleID = ${req.params.id}`,
-    (err, result, fields) => {
-      if (err) {
-        res.status(500).send("Greška pri brisanju");
-        return;
-      } else {
-        res.send("Uspešno izbrisano");
-      }
-    }
-  );
+app.get("/sequencerules", async (req, res) => {
+  const db_connection = await connection();
+  try {
+    const [result] = await db_connection.query(
+      "SELECT * FROM sequencerules  where Active = 1"
+    );
+    res.json(result);
+  } catch (err) {
+    res.status(500).send(err);
+  } finally {
+    await db_connection.end();
+  }
 });
-app.get("/sequencerules", (req, res) => {
-  db_connection.query(
-    "SELECT * FROM sequencerules  where Active = 1",
-    (err, result, fields) => {
-      if (err) {
-        res.status(500).send("Greška pri čitanju podatak iz baze");
-        return;
-      } else {
-        res.json(result);
-      }
-      // else {
-      //     var ret = [];
-      //     result.forEach((item) => {
-      //         for (let i = 0; i < ret.length; i++) {
-      //             var added = false;
-      //             if (item.SequenceRuleID === ret[i].SequenceRuleID) {
-      //                 ret[i].Members.push({
-      //                     SequenceRuleMemberID: item.SequenceRuleMemberID,
-      //                     ShiftID: item.ShiftID
-      //                 })
-      //                 added = true;
-      //                 break;
-      //             }
-      //         }
-      //         if (!added) {
-      //             ret.push({
-      //                 SequenceRuleID: item.SequenceRuleID,
-      //                 Name: item.Name,
-      //                 Members: [{
-      //                     SequenceRuleMemberID: item.SequenceRuleMemberID,
-      //                     ShiftID: item.ShiftID
-      //                 }]
-      //             });
-      //         }
-      //     })
-      //     res.json(ret);
-      // }
-    }
-  );
+app.get("/sequencerules/:id/nurses/", async (req, res) => {
+  const db_connection = await connection();
+  try {
+    const [result] = await db_connection.query(
+      `SELECT n.NurseID, n.Name, n.Surname from nurses_sequencerules ns JOIN nurses n on (ns.NurseID = n.NurseID) WHERE ns.SequenceRuleID = ${req.params.id}`
+    );
+    res.json(result);
+  } catch (err) {
+    res.status(500).send(err);
+  } finally {
+    await db_connection.end();
+  }
 });
-app.get("/sequencerules/:id/nurses/", (req, res) => {
-  db_connection.query(
-    `SELECT n.NurseID, n.Name, n.Surname from nurses_sequencerules ns JOIN nurses n on (ns.NurseID = n.NurseID) WHERE ns.SequenceRuleID = ${req.params.id}`,
-    (err, result, fields) => {
-      if (err) {
-        res.status(500).send("Greška pri čitanju podataka iz baze");
-        return;
-      } else {
-        res.json(result);
-      }
-    }
-  );
+app.post("/sequencerules/:srid/nurses/:nid", async (req, res) => {
+  const db_connection = await connection();
+  try {
+    const [result] = await db_connection.query(
+      `INSERT INTO nurses_sequencerules values(${req.params.srid},${req.params.nid})`
+    );
+    res.json(result);
+  } catch (err) {
+    res.status(500).send(err);
+  } finally {
+    await db_connection.end();
+  }
 });
-app.post("/sequencerules/:srid/nurses/:nid", (req, res) => {
-  db_connection.query(
-    `INSERT INTO nurses_sequencerules values(${req.params.srid},${req.params.nid})`,
-    (err, result, fields) => {
-      if (err) {
-        res.status(500).send("Greška pri čitanju podataka iz baze");
-        return;
-      } else {
-        res.json(result);
-      }
-    }
-  );
+app.delete("/sequencerules/:grid/nurses/:nid", async (req, res) => {
+  const db_connection = await connection();
+  try {
+    const [result] = await db_connection.query(
+      `DELETE from nurses_sequencerules WHERE SequenceRuleID = ${req.params.grid} AND NurseID =  ${req.params.nid}`
+    );
+    res.json(result);
+  } catch (err) {
+    res.status(500).send(err);
+  } finally {
+    await db_connection.end();
+  }
 });
-app.delete("/sequencerules/:grid/nurses/:nid", (req, res) => {
-  db_connection.query(
-    `DELETE from nurses_sequencerules WHERE SequenceRuleID = ${req.params.grid} AND NurseID =  ${req.params.nid}`,
-    (err, result, fields) => {
-      if (err) {
-        res.status(500).send("Greška pri čitanju podataka iz baze");
-        return;
-      } else {
-        res.json(result);
-      }
-    }
-  );
-});
-
-app.put("/groupingrules", (req, res) => {
+app.put("/groupingrules", async (req, res) => {
   var edit = req.body;
 
   if (checkIfRequestEmpty(edit) || edit.length <= 0) {
     res.status(400).send("Neispravno uneti podaci");
   }
+  const db_connection = await connection();
+  try {
+    await startTransaction(db_connection);
 
-  beginTransaction(),
-    (err) => {
-      if (err) res.status(500).send("Greška pri unosu podataka u bazu");
-    };
+    await edit.forEach((param) => {
+      db_connection.query(
+        `UPDATE groupingrules SET Name = '${param.Name}', Max = ${param.Max}, Duration = ${param.Duration} WHERE GroupingRuleID = ${param.GroupingRuleID}`
+      );
+    });
 
-  edit.forEach((param) => {
-    db_connection.query(
-      `UPDATE groupingrules SET Name = '${param.Name}', Max = ${param.Max}, Duration = ${param.Duration} WHERE GroupingRuleID = ${param.GroupingRuleID}`,
-      (err) => {
-        if (err) {
-          rollBackTransaction;
-          res.status(500).send("Greška pri čuvanju izmena u bazi");
-        }
-      }
+    await commitTransaction(db_connection);
+    res.status(200).send("Uspešno sačuvano :)");
+  } catch (err) {
+    rollBackTransaction;
+    res.status(500).send(err);
+  } finally {
+    await db_connection.end();
+  }
+});
+app.post("/groupingrules/:grid/nurses/:nid", async (req, res) => {
+  const db_connection = await connection();
+  try {
+    await db_connection.query(
+      `INSERT INTO nurses_groupingrules values(${req.params.grid},${req.params.nid})`
     );
-  });
-
-  commitTransaction(),
-    (err) => {
-      if (err) res.status(500).send("Greška pri čuvanju izmena u bazi");
-    };
-
-  res.status(200).send("Uspešno sačuvano :)");
+    res.send("Uspesno dodato");
+  } catch (err) {
+    res.status(500).send(err);
+  } finally {
+    await db_connection.end();
+  }
 });
-app.post("/groupingrules/:grid/nurses/:nid", (req, res) => {
-  db_connection.query(
-    `INSERT INTO nurses_groupingrules values(${req.params.grid},${req.params.nid})`,
-    (err, result, fields) => {
-      if (err) {
-        res.status(500).send("Greška pri čitanju podataka iz baze");
-        return;
-      } else {
-        res.json(result);
-      }
-    }
-  );
+app.delete("/groupingrules/:grid/nurses/:nid", async (req, res) => {
+  const db_connection = await connection();
+  try {
+    const [result] = await db_connection.query(
+      `DELETE from nurses_groupingrules WHERE GroupingRuleID = ${req.params.grid} AND NurseID =  ${req.params.nid}`
+    );
+    res.json(result);
+  } catch (err) {
+    res.status(500).send(err);
+  } finally {
+    await db_connection.end();
+  }
 });
-app.delete("/groupingrules/:grid/nurses/:nid", (req, res) => {
-  db_connection.query(
-    `DELETE from nurses_groupingrules WHERE GroupingRuleID = ${req.params.grid} AND NurseID =  ${req.params.nid}`,
-    (err, result, fields) => {
-      if (err) {
-        res.status(500).send("Greška pri čitanju podataka iz baze");
-        return;
-      } else {
-        res.json(result);
-      }
-    }
-  );
+app.get("/groupingrules/:id/nurses", async (req, res) => {
+  const db_connection = await connection();
+  try {
+    const [result] = await db_connection.query(
+      `SELECT n.NurseID, n.Name, n.Surname from nurses_groupingrules ng JOIN nurses n on (ng.NurseID = n.NurseID) WHERE ng.GroupingRuleID = ${req.params.id}`
+    );
+    res.json(result);
+  } catch (err) {
+    res.status(500).send(err);
+  } finally {
+    await db_connection.end();
+  }
 });
-app.get("/groupingrules/:id/nurses", (req, res) => {
-  db_connection.query(
-    `SELECT n.NurseID, n.Name, n.Surname from nurses_groupingrules ng JOIN nurses n on (ng.NurseID = n.NurseID) WHERE ng.GroupingRuleID = ${req.params.id}`,
-    (err, result, fields) => {
-      if (err) {
-        res.status(500).send("Greška pri čitanju podataka iz baze");
-        return;
-      } else {
-        res.json(result);
-      }
-    }
-  );
+app.put("/groupingrules/:id", async (req, res) => {
+  const db_connection = await connection();
+  try {
+    await db_connection.query(
+      `UPDATE groupingrules SET Active = 0 WHERE GroupingRuleID = ${req.params.id}`
+    );
+    res.send("Uspešno izbrisano");
+  } catch (err) {
+    res.status(500).send(err);
+  } finally {
+    await db_connection.end();
+  }
 });
-app.put("/groupingrules/:id", (req, res) => {
-  db_connection.query(
-    `UPDATE groupingrules SET Active = 0 WHERE GroupingRuleID = ${req.params.id}`,
-    (err, result, fields) => {
-      if (err) {
-        res.status(500).send("Greška pri brisanju");
-        return;
-      } else {
-        res.send("Uspešno izbrisano");
-      }
-    }
-  );
+app.get("/groupingrules", async (req, res) => {
+  const db_connection = await connection();
+  try {
+    const [result] = await db_connection.query(
+      "SELECT * FROM groupingrules where Active = 1"
+    );
+    res.json(result);
+  } catch (err) {
+    res.status(500).send(err);
+  } finally {
+    await db_connection.end();
+  }
 });
-app.get("/groupingrules", (req, res) => {
-  db_connection.query(
-    "SELECT * FROM groupingrules where Active = 1",
-    (err, result, fields) => {
-      if (err) {
-        res.status(500).send("Greška pri čitanju podatak iz baze");
-        return;
-      } else {
-        res.json(result);
-      }
-    }
-  );
-});
-app.put("/groupingrules", (req, res) => {
+app.put("/groupingrules", async (req, res) => {
   var edit = req.body;
 
   if (checkIfRequestEmpty(edit) || edit.length <= 0) {
     res.status(400).send("Neispravno uneti podaci");
   }
+  const db_connection = await connection();
+  try {
+    await startTransaction(db_connection);
 
-  beginTransaction(),
-    (err) => {
-      if (err) res.status(500).send("Greška pri unosu podataka u bazu");
-    };
+    await edit.forEach((param) => {
+      if (param.Duration === "") param.Duration = null;
+      db_connection.query(
+        `UPDATE groupingrules SET Name = '${param.Name}', Duration = ${param.Duration}, Max = ${param.Max} WHERE GroupingRuleID = ${param.GroupingRuleID}`
+      );
+    });
 
-  edit.forEach((param) => {
-    if (param.Duration === "") param.Duration = null;
-    db_connection.query(
-      `UPDATE groupingrules SET Name = '${param.Name}', Duration = ${param.Duration}, Max = ${param.Max} WHERE GroupingRuleID = ${param.GroupingRuleID}`,
-      (err) => {
-        if (err) {
-          rollBackTransaction;
-          res.status(500).send("Greška pri čuvanju izmena u bazi");
-        }
-      }
-    );
-  });
-
-  commitTransaction(),
-    (err) => {
-      if (err) res.status(500).send("Greška pri čuvanju izmena u bazi");
-    };
-
-  res.status(200).send("Uspešno sačuvano :)");
+    await commitTransaction(db_connection);
+    res.status(200).send("Uspešno sačuvano :)");
+  } catch (err) {
+    rollBackTransaction;
+    res.status(500).send(err);
+  } finally {
+    await db_connection.end();
+  }
 });
 app.post("/requests/", async (req, res) => {
   var requests = req.body;
-
-  beginTransaction(),
-    (err) => {
-      if (err) res.status(500).send("Greška pri unosu podataka u bazu");
-    };
 
   var schid = 0;
   var date = new Date();
@@ -723,280 +746,143 @@ app.post("/requests/", async (req, res) => {
     var day = new Date(date.getFullYear(), requests.schedule.Month, i).getDay();
     if (day > 0 && day < 6) WorkingDays++;
   }
+  const db_connection = await connection();
+  try {
+    await startTransaction(db_connection);
 
-  db_connection.query(
-    `INSERT INTO schedules (GeneratedOn, Name, Month, Year, NumberOfDays, WorkingDays) VALUES` +
-      `('${new Date(Date.now()).toJSON().slice(0, 10)}', '${
-        requests.schedule.Name
-      }', ${
-        requests.schedule.Month
-      }, ${Year}, ${NumberOfDays}, ${WorkingDays})`,
-    (err) => {
-      if (err) {
-        rollBackTransaction();
-        res.status(500).send("Greška pri unosu podataka u bazu");
-      } else {
-        db_connection.query(
-          "SELECT ScheduleID as id from schedules order by ScheduleID DESC LIMIT 1",
-          async (err, result, fields) => {
-            if (err) {
-              rollBackTransaction();
-              res.status(500).send("Greška pri unosu podataka u bazu");
-            } else {
-              schid = result[0].id;
+    await db_connection.query(
+      `INSERT INTO schedules (GeneratedOn, Name, Month, Year, NumberOfDays, WorkingDays) VALUES` +
+        `('${new Date(Date.now()).toJSON().slice(0, 10)}', '${
+          requests.schedule.Name
+        }', ${
+          requests.schedule.Month
+        }, ${Year}, ${NumberOfDays}, ${WorkingDays})`
+    );
 
-              requests.days.forEach(
-                async (request) =>
-                  await addNonWorkingDays(
-                    request,
-                    schid,
-                    res,
-                    requests.schedule.Month
-                  )
-              );
-              requests.shifts.forEach(
-                async (request) =>
-                  await addNonWorkingShifts(request, schid, res)
-              );
-              requests.mustWork.forEach(
-                async (request) => await addMustWorkShifts(request, schid, res)
-              );
-              requests.specialNeeds.forEach(
-                async (request) => await addSpecialNeeds(request, schid, res)
-              );
+    const [result] = await db_connection.query(
+      "SELECT ScheduleID as id from schedules order by ScheduleID DESC LIMIT 1"
+    );
 
-              commitTransaction(),
-                (err) => {
-                  if (err)
-                    res.status(500).send("Greška pri unosu podataka u bazu");
-                };
+    schid = result[0].id;
 
-              var p = await open(process.env.AMPL_LOC);
-              res.status(200).send("Uspešno sačuvano");
-            }
-          }
-        );
-      }
-    }
-  );
+    await requests.days.forEach(
+      async (request) =>
+        await addNonWorkingDays(
+          request,
+          schid,
+          res,
+          requests.schedule.Month,
+          db_connection
+        )
+    );
+    await requests.shifts.forEach(
+      async (request) =>
+        await addNonWorkingShifts(request, schid, res, db_connection)
+    );
+    await requests.mustWork.forEach(
+      async (request) =>
+        await addMustWorkShifts(request, schid, res, db_connection)
+    );
+    await requests.specialNeeds.forEach(
+      async (request) =>
+        await addSpecialNeeds(request, schid, res, db_connection)
+    );
+    await commitTransaction(db_connection);
+
+    // var p = await open(process.env.AMPL_LOC);
+    res.status(200).send("Uspešno sačuvano");
+  } catch (err) {
+    console.log(err);
+    await rollbackTransaction(db_connection);
+    res.status(500).send(err);
+  } finally {
+    await db_connection.end();
+  }
 });
 app.get("/schedules", async (req, res) => {
-  db_connection.query("SELECT * FROM schedules", (err, result, fields) => {
-    if (err) {
-      res.status(500).send("Greška pri čitanju iz baze");
-    } else {
-      res.json(result);
-    }
-  });
+  const db_connection = await connection();
+  try {
+    const [result] = await db_connection.query("SELECT * FROM schedules");
+    res.json(result);
+  } catch (err) {
+    res.status(500).send(err);
+  } // finally {// await db_connection.end();
+  //}
 });
 app.get("/schedules/:id", async (req, res) => {
-  db_connection.query(
-    `SELECT * FROM schedules WHERE ScheduleID = ${req.params.id}`,
-    (err, result, fields) => {
-      if (err) {
-        res.status(500).send("Greška pri čitanju iz baze");
-      } else {
-        var data = Object.values(JSON.parse(JSON.stringify(result)))[0];
-        db_connection.query(
-          `SELECT a.NurseID, n.Name, n.Surname, a.Day, p.Symbol, p.Duration FROM assignements a ` +
-            `JOIN nurses n on (a.NurseID = n.NurseID) JOIN Patterns p on (a.PatternID = p.PatternID) WHERE a.ScheduleID = ${req.params.id} order by a.NurseID, a.Day;`,
-          (err, result, fields) => {
-            if (err) {
-              res.status(500).send("Greška pri čitanju iz baze");
-            } else {
-              var assignedDays = Object.values(
-                JSON.parse(JSON.stringify(result))
-              );
-              db_connection.query(
-                `SELECT nwd.NurseID,  n.Name, n.Surname, nwd.DateFrom, nwd.DateUntil, nwdt.Symbol, nwdt.NumberOfHours FROM nonworkingdays nwd` +
-                  ` JOIN nonworkingdaytypes nwdt ON (nwd.NonWorkingDayTypeID = nwdt.NonWorkingDayTypeID) JOIN nurses n ON (nwd.NurseID = n.NurseID)` +
-                  ` WHERE ScheduleID = ${req.params.id} order by n.NurseID, nwd.DateFrom;`,
-                (err, result, fields) => {
-                  if (err) {
-                    res.status(500).send("Greška pri čitanju iz baze");
-                  } else {
-                    assignedDays.forEach((a) => {
-                      a.Working = true;
-                    });
+  const db_connection = await connection();
+  try {
+    const [result] = await db_connection.query(
+      `SELECT * FROM schedules WHERE ScheduleID = ${req.params.id}`
+    );
+    var data = Object.values(JSON.parse(JSON.stringify(result)))[0];
 
-                    var nonWorkingDays = Object.values(
-                      JSON.parse(JSON.stringify(result))
-                    );
-                    var nonWorkingDaysFormatted = [];
-                    nonWorkingDays.forEach((nwd) => {
-                      for (let p = nwd.DateFrom; p <= nwd.DateUntil; p++) {
-                        nonWorkingDaysFormatted.push({
-                          NurseID: nwd.NurseID,
-                          Name: nwd.Name,
-                          Surname: nwd.Surname,
-                          Day: p,
-                          Symbol: nwd.Symbol,
-                          Duration: nwd.NumberOfHours,
-                          Working: false,
-                        });
-                      }
-                    });
+    var assignedDays = await getAssignementsForSchedule(
+      data.ScheduleID,
+      db_connection
+    );
+    var nwdays = await getNWDForSchedule(data.ScheduleID, db_connection);
 
-                    var toFormat = [];
-
-                    for (let p = 0; p < assignedDays.length; p++) {
-                      var ad_nid = assignedDays[p].NurseID;
-                      for (let q = 0; q < nonWorkingDaysFormatted.length; q++) {
-                        if (
-                          assignedDays[p].NurseID ===
-                          nonWorkingDaysFormatted[q].NurseID
-                        ) {
-                          if (
-                            nonWorkingDaysFormatted[q].Day < assignedDays[p].Day
-                          ) {
-                            toFormat.push(nonWorkingDaysFormatted[q]);
-                            nonWorkingDaysFormatted.splice(q, 1);
-                            q--;
-                          } else if (
-                            nonWorkingDaysFormatted[q].Day > assignedDays[p].Day
-                          ) {
-                            toFormat.push(assignedDays[p]);
-                            assignedDays.splice(p, 1);
-                            q--;
-                          } else if (
-                            nonWorkingDaysFormatted[q].Day ===
-                            assignedDays[p].Day
-                          ) {
-                            toFormat.push(assignedDays[p]);
-                            assignedDays.splice(p, 1);
-                            nonWorkingDaysFormatted.splice(q, 1);
-                            q--;
-                          }
-                        } else {
-                          break;
-                        }
-                      }
-                      while (
-                        assignedDays.length > 0 &&
-                        assignedDays[p].NurseID === ad_nid
-                      ) {
-                        toFormat.push(assignedDays[p]);
-                        assignedDays.splice(p, 1);
-                      }
-                      var v = 0;
-                      while (
-                        nonWorkingDaysFormatted.length > 0 &&
-                        nonWorkingDaysFormatted[v].NurseID === ad_nid
-                      ) {
-                        toFormat.push(nonWorkingDaysFormatted[v]);
-                        nonWorkingDaysFormatted.splice(v, 1);
-                      }
-                      p--;
-                    }
-
-                    for (let q = 0; q < nonWorkingDaysFormatted.length; q++) {
-                      toFormat.push(nonWorkingDaysFormatted[q]);
-                      nonWorkingDaysFormatted.splice(q, 1);
-                    }
-
-                    var nid = toFormat[0].NurseID;
-                    var final = [];
-                    var j = 0;
-
-                    for (let i = 0; i < toFormat.length; i++) {
-                      if (i === 0 || nid !== toFormat[i].NurseID) {
-                        nid = toFormat[i].NurseID;
-
-                        final.push({
-                          NurseID: nid,
-                          NurseName:
-                            toFormat[i].Name + " " + toFormat[i].Surname,
-                          Days: [
-                            {
-                              Day: toFormat[i].Day,
-                              Symbol: toFormat[i].Symbol,
-                              Duration: toFormat[i].Duration,
-                              Working: toFormat[i].Working,
-                            },
-                          ],
-                        });
-                        j++;
-                      } else {
-                        final[j - 1].Days.push({
-                          Day: toFormat[i].Day,
-                          Symbol: toFormat[i].Symbol,
-                          Duration: toFormat[i].Duration,
-                          Working: toFormat[i].Working,
-                        });
-                      }
-                    }
-                    data.NursesAndDays = final;
-                    res.json(data);
-                  }
-                }
-              );
-            }
-          }
-        );
-      }
-    }
-  );
+    data.NursesAndDays = await formatAssAndNwd(assignedDays, nwdays);
+    res.json(data);
+  } catch (err) {
+    res.status(500).send(err);
+  } finally {
+    await db_connection.end();
+  }
 });
 app.post("/schedules/:id", async (req, res) => {
-  beginTransaction(),
-    (err) => {
-      if (err) res.status(500).send("Greška pri unosu podataka u bazu");
-    };
+  const db_connection = await connection();
+  try {
+    await startTransaction(db_connection);
 
-  db_connection.query("SET SQL_SAFE_UPDATES = 0;", (err, result) => {
-    if (err) {
-      res.status(500).send(err);
-    } else {
-      db_connection.query(
-        "update schedules set Chosen = 0 where Month in" +
-          "(select Month from " +
-          `        (select Month from schedules where ScheduleID = ${req.params.id}) as m` +
-          "   );",
-        (err, result) => {
-          if (err) {
-            res.status(500).send(err);
-          } else {
-            db_connection.query(
-              `update schedules set Chosen = 1 where ScheduleID = ${req.params.id}`,
-              (err, result) => {
-                if (err) {
-                  res.status(500).send(err);
-                } else {
-                  commitTransaction(),
-                    (err) => {
-                      if (err)
-                        res
-                          .status(500)
-                          .send("Greška pri unosu podataka u bazu");
-                    };
-                  res.status(200).send("Uspešno sačuvano");
-                }
-              }
-            );
-          }
-        }
-      );
-    }
-  });
+    await db_connection.query("SET SQL_SAFE_UPDATES = 0;");
+    await db_connection.query(
+      "update schedules set Chosen = 0 where Month in" +
+        "(select Month from " +
+        `        (select Month from schedules where ScheduleID = ${req.params.id}) as m` +
+        "   );"
+    );
+    await db_connection.query(
+      `update schedules set Chosen = 1 where ScheduleID = ${req.params.id}`
+    );
+    await commitTransaction(db_connection);
+    res.status(200).send("Uspešno sačuvano");
+  } catch (err) {
+    res.status(500).send(err);
+  } finally {
+    await db_connection.end();
+  }
 });
 
-// app.post('/fill', async (req, res) => {
-//     beginTransaction(), (err) => {
+app.get("/test", async (req, res) => {
+  const db_connection = await connection();
+  try {
+    const [result] = await db_connection.query("select * from scheduls");
+  } catch (err) {
+    res.status(507).send("error");
+  } finally {
+    await db_connection.end();
+  }
+});
+
+// app.post('/fill', async async (req, res) => {
+//     await beginTransaction(), (err) => {
 //         if (err)
-//             res.status(500).send("Greška pri unosu podataka u bazu");
+//         res.status(500).send(err);
 //     };
 //     for (let i = 1; i <= 27; i++) {
 //         for (let j = 1; j <= 7; j++) {
-//             db_connection.query(`insert into nurses_sequencerules values(${ j }, ${ i })`,
+//             await db_connection.query(`insert into nurses_sequencerules values(${ j }, ${ i })`,
 //                 (err, result) => {
 //                     if (err)
 //                         console.log(err);
 //                 })
 //         }
 //     }
-//     commitTransaction(), (err) => {
+//     await commitTransaction(db_connection), (err) => {
 //         if (err)
-//             res.status(500).send("Greška pri unosu podataka u bazu");
+//         res.status(500).send(err);
 //     };
 //     res.status(200).send("Uspešno sačuvano");
 // })
