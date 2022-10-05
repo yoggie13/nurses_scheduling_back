@@ -38,10 +38,10 @@ const startTransaction = async (db_connection) => {
   await db_connection.query("START TRANSACTION");
 };
 const commitTransaction = async (db_connection) => {
-  await db_connection.query("COMMIT;");
+  await db_connection.query("COMMIT");
 };
 const rollBackTransaction = async (db_connection) => {
-  await db_connection.query("ROLLBACK TRANSACTION;");
+  await db_connection.query("ROLLBACK");
 };
 
 const addNonWorkingDays = async (request, schid, res, month, db_connection) => {
@@ -233,6 +233,45 @@ const formatAssAndNwd = (assignedDays, nonWorkingDays) => {
   }
   return final;
 };
+const addMainNursesAssignements = async (
+  db_connection,
+  schid,
+  WorkingDays,
+  nonWorkingDays
+) => {
+  const [result] = await db_connection.query(
+    "SELECT NurseID from nurses where Active = 1 and Main = 1 and InDepartment = 1"
+  );
+
+  for (let k = 0; k < result.length; k++) {
+    for (let i = 0; i < WorkingDays.length; i++) {
+      var broke = false;
+      for (let j = 0; j < nonWorkingDays.length; j++) {
+        if (
+          nonWorkingDays[j].NurseID === result[k].NurseID &&
+          WorkingDays[i] >= nonWorkingDays[j].DateFrom &&
+          WorkingDays[i] <= nonWorkingDays[j].DateUntil
+        ) {
+          if (WorkingDays.includes(nonWorkingDays[j].DateUntil))
+            i = WorkingDays.indexOf(nonWorkingDays[j].DateUntil);
+          else if (WorkingDays.includes(nonWorkingDays[j].DateUntil - 1))
+            i = WorkingDays.indexOf(nonWorkingDays[j].DateUntil - 1);
+          else i = WorkingDays.indexOf(nonWorkingDays[j].DateUntil - 2);
+          broke = true;
+          break;
+        }
+      }
+
+      if (!broke) {
+        // console.log(`${k} - ${result[k].NurseID}`);
+        // console.log(`${i} - ${WorkingDays[i]}`);
+        await db_connection.query(
+          `insert into assignements values (${schid}, ${result[k].NurseID}, ${WorkingDays[i]}, 1)`
+        );
+      }
+    }
+  }
+};
 app.use(
   express.urlencoded({
     extended: true,
@@ -304,7 +343,7 @@ app.put("/nurses/delete", async (req, res) => {
     await commitTransaction(db_connection);
     res.status(200).send("Uspešno sačuvano :)");
   } catch (err) {
-    await rollbackTransaction(db_connection);
+    await rollBackTransaction(db_connection);
     res.status(500).send(err);
   } finally {
     await db_connection.end();
@@ -331,9 +370,10 @@ app.put("/nurses", async (req, res) => {
   try {
     await startTransaction(db_connection);
 
-    await edit.forEach((nurse) => {
-      db_connection.query(
-        `UPDATE nurses SET Name = '${nurse.Name}', Surname = '${nurse.Surname}', Experienced = ${nurse.Experienced}, Main = ${nurse.Main} WHERE NurseID = ${nurse.NurseID}`
+    await edit.forEach(async (nurse) => {
+      await db_connection.query(
+        `UPDATE nurses SET Name = '${nurse.Name}', Surname = '${nurse.Surname}', Experienced = ${nurse.Experienced}, Main = ${nurse.Main}, InDepartment = ${nurse.InDepartment}
+         WHERE NurseID = ${nurse.NurseID}`
       );
     });
 
@@ -356,9 +396,9 @@ app.post("/nurses", async (req, res) => {
   const db_connection = await connection();
   try {
     await startTransaction(db_connection);
-    await nurses.forEach((nurse) => {
-      db_connection.query(
-        `INSERT INTO nurses (Name, Surname, Experienced, Main) value("${nurse.Name}", "${nurse.Surname}", ${nurse.Experienced})`
+    await nurses.forEach(async (nurse) => {
+      await db_connection.query(
+        `INSERT INTO nurses (Name, Surname, Experienced) value("${nurse.Name}", "${nurse.Surname}", ${nurse.Experienced})`
       );
     });
     await commitTransaction(db_connection);
@@ -739,12 +779,18 @@ app.post("/requests/", async (req, res) => {
     requests.schedule.Month,
     0
   ).getDate();
-  var WorkingDays = 0;
   var Year = date.getFullYear();
+  var WorkingDays = [];
 
   for (let i = 1; i <= NumberOfDays; i++) {
-    var day = new Date(date.getFullYear(), requests.schedule.Month, i).getDay();
-    if (day > 0 && day < 6) WorkingDays++;
+    var day = new Date(
+      date.getFullYear(),
+      requests.schedule.Month - 1,
+      i
+    ).getDay();
+    if (day > 0 && day < 6) {
+      WorkingDays.push(i);
+    }
   }
   const db_connection = await connection();
   try {
@@ -754,9 +800,9 @@ app.post("/requests/", async (req, res) => {
       `INSERT INTO schedules (GeneratedOn, Name, Month, Year, NumberOfDays, WorkingDays) VALUES` +
         `('${new Date(Date.now()).toJSON().slice(0, 10)}', '${
           requests.schedule.Name
-        }', ${
-          requests.schedule.Month
-        }, ${Year}, ${NumberOfDays}, ${WorkingDays})`
+        }', ${requests.schedule.Month}, ${Year}, ${NumberOfDays}, ${
+          WorkingDays.length
+        })`
     );
 
     const [result] = await db_connection.query(
@@ -787,13 +833,20 @@ app.post("/requests/", async (req, res) => {
       async (request) =>
         await addSpecialNeeds(request, schid, res, db_connection)
     );
+
+    await addMainNursesAssignements(
+      db_connection,
+      schid,
+      WorkingDays,
+      requests.days
+    );
     await commitTransaction(db_connection);
 
     // var p = await open(process.env.AMPL_LOC);
     res.status(200).send("Uspešno sačuvano");
   } catch (err) {
     console.log(err);
-    await rollbackTransaction(db_connection);
+    await rollBackTransaction(db_connection);
     res.status(500).send(err);
   } finally {
     await db_connection.end();
