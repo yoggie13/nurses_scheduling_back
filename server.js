@@ -762,19 +762,17 @@ app.post("/requests/", async (req, res) => {
   var requests = req.body;
 
   var schid = 0;
-  var date = new Date();
 
   var NumberOfDays = new Date(
-    date.getFullYear(),
+    requests.schedule.Year,
     requests.schedule.Month,
     0
   ).getDate();
-  var Year = date.getFullYear();
   var WorkingDays = [];
 
   for (let i = 1; i <= NumberOfDays; i++) {
     var day = new Date(
-      date.getFullYear(),
+      requests.schedule.Year,
       requests.schedule.Month - 1,
       i
     ).getDay();
@@ -790,9 +788,9 @@ app.post("/requests/", async (req, res) => {
       `INSERT INTO schedules (GeneratedOn, Name, Month, Year, NumberOfDays, WorkingDays) VALUES` +
         `('${new Date(Date.now()).toJSON().slice(0, 10)}', '${
           requests.schedule.Name
-        }', ${requests.schedule.Month}, ${Year}, ${NumberOfDays}, ${
-          WorkingDays.length
-        })`
+        }', ${requests.schedule.Month}, ${
+          requests.schedule.Year
+        }, ${NumberOfDays}, ${WorkingDays.length})`
     );
 
     const [result] = await db_connection.query(
