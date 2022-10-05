@@ -325,22 +325,12 @@ app.get("/daysForSelect", async (req, res) => {
     await db_connection.end();
   }
 });
-app.put("/nurses/delete", async (req, res) => {
-  var nurses = req.body;
-
-  if (checkIfRequestEmpty(nurses) || nurses.length <= 0) {
-    res.status(400).send("Neispravno uneti podaci");
-  }
-
+app.put("/nurses/:id/delete", async (req, res) => {
   const db_connection = await connection();
   try {
-    await startTransaction(db_connection);
-    await nurses.forEach((nurse) => {
-      db_connection.query(
-        `UPDATE nurses SET Active=0 WHERE NurseID = ${nurse}`
-      );
-    });
-    await commitTransaction(db_connection);
+    await db_connection.query(
+      `UPDATE nurses SET Active=0 WHERE NurseID = ${req.params.id}`
+    );
     res.status(200).send("Uspešno sačuvano :)");
   } catch (err) {
     await rollBackTransaction(db_connection);
