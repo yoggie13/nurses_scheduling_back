@@ -855,7 +855,9 @@ app.post("/requests/", async (req, res) => {
 app.get("/schedules", async (req, res) => {
   const db_connection = await connection();
   try {
-    const [result] = await db_connection.query("SELECT * FROM schedules");
+    const [result] = await db_connection.query(
+      "SELECT * FROM schedules ORDER BY ScheduleID DESC"
+    );
     res.json(result);
   } catch (err) {
     res.status(500).send(err);
