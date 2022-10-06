@@ -46,34 +46,33 @@ const rollBackTransaction = async (db_connection) => {
 
 const addNonWorkingDays = async (request, schid, res, month, db_connection) => {
   try {
+    var rows = [request];
     if (request.DayType === 2) {
-      var rows = [];
+      rows = [];
       for (let i = request.DateFrom; i <= request.DateUntil; i++) {
         var row = {
-          ScheduleID: schid,
           NurseID: request.NurseID,
           IsMandatory: request.IsMandatory,
         };
         var day = new Date(new Date().getFullYear(), month - 1, i).getDay();
         if (day === 0 || day === 6) {
           row.DateFrom = i;
-          row.NonWorkingDayTypeID = 1;
+          row.DayType = 1;
           if (day === 6 && i + 1 <= request.DateUntil) row.DateUntil = i + 1;
           else row.DateUntil = i;
         } else {
           row.DateFrom = i;
-          row.NonWorkingDayTypeID = 2;
+          row.DayType = 2;
           row.DateUntil = Math.min(request.DateUntil, i + 5 - day);
         }
         rows.push(row);
         i = row.DateUntil;
       }
-      request = rows;
     }
-    await request.forEach(async (r) => {
+    await rows.forEach(async (r) => {
       await db_connection.query(
         "insert into nonworkingdays values " +
-          `(${r.ScheduleID},${r.NurseID},${r.DateFrom},${r.DateUntil},${r.NonWorkingDayTypeID},${r.IsMandatory})`
+          `(${schid},${r.NurseID},${r.DateFrom},${r.DateUntil},${r.DayType},${r.IsMandatory})`
       );
     });
   } catch (err) {

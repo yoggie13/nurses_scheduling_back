@@ -50,10 +50,10 @@ table sequence_rule_members "ODBC" (connectionString) "sequencerulemembers"
 	prs_tuples <- [SRID, SRMID, PID];
 	
 table nurses_sr "ODBC" (connectionString) "sequencerulemembers"
-	"SQL=SELECT ns.SequenceRuleID, ns.NurseID FROM nurses_sequencerules ns"
+	("SQL=SELECT ns.SequenceRuleID, ns.NurseID FROM nurses_sequencerules ns"
 	& " JOIN nurses n ON (ns.NurseID = n.NurseID)"
 	& " JOIN sequencerules s ON (ns.SequenceRuleID = s.SequenceRuleID)"
-	& " WHERE n.Active = 1 AND n.Main = 0 and n.InDepartment = 1 and s.Active = 1":
+	& " WHERE n.Active = 1 AND n.Main = 0 and n.InDepartment = 1 and s.Active = 1"):
 	NS_tuples <- [SequenceRuleID, NurseID];
 
 table groupingrules "ODBC" (connectionString) "groupingrules"
@@ -61,45 +61,55 @@ table groupingrules "ODBC" (connectionString) "groupingrules"
 	RG <- [GroupingRuleID], prg ~ PatternID, tg ~ Duration, nug ~ Max;
 
 table groupingrulesnurses "ODBC" (connectionString) "nurses_groupingrules"
-	"SQL=SELECT ng.GroupingRuleID, ng.NurseID FROM nurses_groupingrules ng"
+	("SQL=SELECT ng.GroupingRuleID, ng.NurseID FROM nurses_groupingrules ng"
 	& " JOIN nurses n ON (ng.NurseID = n.NurseID)"
 	& " JOIN groupingrules g ON (ng.GroupingRuleID = g.GroupingRuleID)"
-	& " WHERE n.Active = 1 AND n.Main = 0 and n.InDepartment = 1 and g.Active = 1":
+	& " WHERE n.Active = 1 AND n.Main = 0 and n.InDepartment = 1 and g.Active = 1"):
 	NR_tuples <- [GroupingRuleID, NurseID];
 	
 table dntable "ODBC" (connectionString) "nonworkingdaytypes"
-	"SQL=select NumberOfHours from nonworkingdaytypes where Active = 1":
-	DN <- [NumberOfHours];
+	"SQL=select NonWorkingDayTypeID, NumberOfHours from nonworkingdaytypes where Active = 1":
+	DN <- [NonWorkingDayTypeID], NWD_duration ~ NumberOfHours;
 
 table nurse_vac "ODBC" (connectionString) "nonworkingdays"
 	("SQL=SELECT n.NurseID, n.DateFrom, n.DateUntil, nt.NumberOfHours FROM nonworkingdays n"
 	& " join nonworkingdaytypes nt on (n.NonWorkingDayTypeID = nt.NonWorkingDayTypeID)"
+	& " JOIN nurses nu ON (n.NurseID = nu.NurseID)"
 	& " where n.ScheduleID=" & member(1, SCH)
+	& " AND nu.Active = 1 AND nu.InDepartment = 1 and nu.Main = 0"
 	& " and n.Must=1"):
 	VD_tuples <- [NurseID, DateFrom, DateUntil, NumberOfHours];
 
 table nurse_vac_pos "ODBC" (connectionString) "nonworkingdays"
 	("SQL=SELECT n.NurseID, n.DateFrom, n.DateUntil, nt.NumberOfHours FROM nonworkingdays n"
 	& " join nonworkingdaytypes nt on (n.NonWorkingDayTypeID = nt.NonWorkingDayTypeID)"
+	& " JOIN nurses nu ON (n.NurseID = nu.NurseID)"
 	& " where n.ScheduleID=" & member(1, SCH)
+	& " AND nu.Active = 1 AND nu.InDepartment = 1 and nu.Main = 0"
 	& " and n.Must=0"):
 	VD_tuples_pos <- [NurseID, DateFrom, DateUntil, NumberOfHours];
 
 table nurse_shift_must "ODBC" (connectionString) "nonworkingshifts"
-	("SQL=select NurseID, DateFrom, DateUntil, ShiftID from nonworkingshifts"
-	& " where ScheduleID=" & member(1, SCH)
-	& " and Must=1"):	
+	("SQL=SELECT nws.NurseID, nws.DateFrom,  nws.DateUntil, nws.ShiftID FROM nonworkingshifts nws"
+	& " JOIN nurses n ON (nws.NurseID = n.NurseID)"
+	& " where nws.ScheduleID=" & member(1, SCH)
+	& " AND n.Active = 1 AND n.InDepartment = 1 AND n.Main = 0"
+	& " and nws.Must=1"):	
 	TF_tuples <- [NurseID, DateFrom,DateUntil,ShiftID];
 
 table nurse_shift_would "ODBC" (connectionString) "nonworkingshifts"
-	("SQL=select NurseID, DateFrom, DateUntil, ShiftID from nonworkingshifts"
-	& " where ScheduleID=" & member(1, SCH)
-	& " and Must=0;"):
+	("SQL=SELECT nws.NurseID, nws.DateFrom,  nws.DateUntil, nws.ShiftID FROM nonworkingshifts nws"
+	& " JOIN nurses n ON (nws.NurseID = n.NurseID)"
+	& " where nws.ScheduleID=" & member(1, SCH)
+	& " AND n.Active = 1 AND n.InDepartment = 1 AND n.Main = 0"
+	& " and nws.Must=0;"):
 	TP_tuples <- [NurseID, DateFrom, DateUntil, ShiftID];	
 
 table nurse_must_work "ODBC" (connectionString) "mustworkshifts"
-	("SQL=select NurseID, DateFrom, DateUntil, ShiftID from mustworkshifts"
-	& " where ScheduleID=" & member(1,SCH)):
+	("SQL=select mws.NurseID, mws.DateFrom, mws.DateUntil, mws.ShiftID from mustworkshifts mws"
+	& " join nurses n on (mws.NurseID = n.NurseID)"
+	& " where mws.ScheduleID=" & member(1,SCH)
+	& " and n.Active = 1 and n.Main = 0 and n.InDepartment = 1"):
 	TW_tuples <- [NurseID, DateFrom, DateUntil, ShiftID];
 
 table special_needs_shifts "ODBC" (connectionString) "specialneedsshifts"

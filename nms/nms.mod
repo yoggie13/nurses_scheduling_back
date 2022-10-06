@@ -43,8 +43,9 @@ var maxDurRS := max {i in RS} ts[i];
 
 # termini / sestre
 set DN; #pomocna
-set VD_tuples within {N, D, D, DN}; #pomocna 
-set VD_tuples_pos within {N, D, D, DN}; #pomocna 
+param NWD_duration{DN}; #sati trajanja neradnih dana
+set VD_tuples within {N, D, D, {setof{dn in DN} NWD_duration[dn]}}; #pomocna 
+set VD_tuples_pos within {N, D, D, {setof{dn in DN} NWD_duration[dn]}}; #pomocna 
 set VD{i in N}, within D := setof{(i,j,k,w) in VD_tuples, l in {j..k}} l; # podskup dana u kojima je sestra n na god. odmoru, tj.
 set VD_pos{i in N}, within D := setof{(i,j,k,w) in VD_tuples_pos, l in {j..k}} l;               # podskup dana u kojima je sestra n na god. odmoru, tj.
 set WD{n in N} := D diff VD[n];                     # podskup dana u kojima sestra n nije na odmoru (tj. raspoloziva je za posao)
