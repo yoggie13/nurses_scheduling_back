@@ -25,7 +25,7 @@ param tsh{PAT} default 0;                # trajanje smene
 # pravila sekvenci
 set RS;	# skup pravila nedozvoljenih sekvenci
 set NS_tuples within {RS, N}; #pomocna
-set NS{i in RS} := {j in N : (i,j) in NS_tuples}; #pravilo sekvenci za koje sestre važi
+set NS{i in RS} := {j in N : (i,j) in NS_tuples}; #pravilo sekvenci za koje sestre vaï¿½i
 param ts{RS};                   # interval sekvence
 set prs_tuples within {RS, D, PAT}; #pomocna               
 param prs{r in RS, j in 1..ts[r]} := sum{(r,j,k) in prs_tuples} k;   # patern za svaki dan sekvence #PROVERITI
@@ -38,8 +38,8 @@ param prg{RG};
 param tg{RG} default dpm[member(1,SCH)];
 param nug{RG};
 
-var maxDurRG := max {i in RG : tg[i] != dpm[member(1,SCH)]} tg[i];
-var maxDurRS := max {i in RS} ts[i];
+var maxDurRG := MaxOccurences {i in RG : tg[i] != dpm[member(1,SCH)]} tg[i];
+var maxDurRS := MaxOccurences {i in RS} ts[i];
 
 # termini / sestre
 set DN; #pomocna

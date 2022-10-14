@@ -58,7 +58,7 @@ table nurses_sr "ODBC" (connectionString) "sequencerulemembers"
 
 table groupingrules "ODBC" (connectionString) "groupingrules"
 	"SQL=select * from groupingrules where Active = 1":
-	RG <- [GroupingRuleID], prg ~ PatternID, tg ~ Duration, nug ~ Max;
+	RG <- [GroupingRuleID], prg ~ PatternID, tg ~ Duration, nug ~ MaxOccurences;
 
 table groupingrulesnurses "ODBC" (connectionString) "nurses_groupingrules"
 	("SQL=SELECT ng.GroupingRuleID, ng.NurseID FROM nurses_groupingrules ng"

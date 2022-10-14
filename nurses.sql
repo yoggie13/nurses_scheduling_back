@@ -339,7 +339,7 @@ CREATE TABLE `groupingrules` (
   `Name` varchar(60) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `PatternID` int DEFAULT NULL,
   `Duration` int DEFAULT NULL,
-  `Max` int DEFAULT NULL,
+  `MaxOccurences` int DEFAULT NULL,
   `Active` tinyint(1) DEFAULT '1',
   PRIMARY KEY (`GroupingRuleID`),
   KEY `FK_GroupingRules_Patern_idx` (`PatternID`),
@@ -348,7 +348,7 @@ CREATE TABLE `groupingrules` (
 
 /*Data for the table `groupingrules` */
 
-insert  into `groupingrules`(`GroupingRuleID`,`Name`,`PatternID`,`Duration`,`Max`,`Active`) values 
+insert  into `groupingrules`(`GroupingRuleID`,`Name`,`PatternID`,`Duration`,`MaxOccurences`,`Active`) values 
 (1,'Noćna smena sme da se pojavi najviše 1 put u 3 dana',3,3,1,1),
 (2,'Celodnevna sme da se pojavi najviše 1 put u 3 dana',12,3,1,1),
 (3,'1. smena sme da se pojavi najviše 3 puta u 5 dana',1,5,3,1),

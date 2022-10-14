@@ -653,7 +653,7 @@ app.put("/groupingrules", async (req, res) => {
 
     await edit.forEach((param) => {
       db_connection.query(
-        `UPDATE groupingrules SET Name = '${param.Name}', Max = ${param.Max}, Duration = ${param.Duration} WHERE GroupingRuleID = ${param.GroupingRuleID}`
+        `UPDATE groupingrules SET Name = '${param.Name}', MaxOccurences = ${param.MaxOccurences}, Duration = ${param.Duration} WHERE GroupingRuleID = ${param.GroupingRuleID}`
       );
     });
 
@@ -744,7 +744,7 @@ app.put("/groupingrules", async (req, res) => {
     await edit.forEach((param) => {
       if (param.Duration === "") param.Duration = null;
       db_connection.query(
-        `UPDATE groupingrules SET Name = '${param.Name}', Duration = ${param.Duration}, Max = ${param.Max} WHERE GroupingRuleID = ${param.GroupingRuleID}`
+        `UPDATE groupingrules SET Name = '${param.Name}', Duration = ${param.Duration}, MaxOccurences = ${param.MaxOccurences} WHERE GroupingRuleID = ${param.GroupingRuleID}`
       );
     });
 
