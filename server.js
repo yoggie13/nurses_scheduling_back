@@ -271,6 +271,26 @@ const addMainNursesAssignements = async (
     }
   }
 };
+const getNonDepartmentNurses = async (db_connection) => {
+  try {
+    const [result] = await db_connection.query(
+      "SELECT * from nurses where Active = 1 and InDepartment = 0"
+    );
+
+    var ret = [];
+    result.forEach((n) => {
+      ret.push({
+        NurseID: n.NurseID,
+        NurseName: n.Name + " " + n.Surname,
+        Days: [],
+      });
+    });
+
+    return ret;
+  } catch (err) {
+    throw err;
+  }
+};
 app.use(
   express.urlencoded({
     extended: true,
@@ -843,7 +863,7 @@ app.get("/schedules", async (req, res) => {
   const db_connection = await connection();
   try {
     const [result] = await db_connection.query(
-      "SELECT * FROM schedules ORDER BY ScheduleID DESC"
+      "SELECT * FROM scheduleswithgenerated"
     );
     res.json(result);
   } catch (err) {
@@ -866,6 +886,10 @@ app.get("/schedules/:id", async (req, res) => {
     var nwdays = await getNWDForSchedule(data.ScheduleID, db_connection);
 
     data.NursesAndDays = await formatAssAndNwd(assignedDays, nwdays);
+
+    data.NursesAndDays = data.NursesAndDays.concat(
+      await getNonDepartmentNurses(db_connection)
+    );
     res.json(data);
   } catch (err) {
     res.status(500).send(err);
@@ -896,35 +920,39 @@ app.post("/schedules/:id", async (req, res) => {
     await db_connection.end();
   }
 });
+// app.post("/fill", async (req, res) => {
+//   try {
+//     const db_connection = await connection();
+//     var schid = 96;
+//     var WorkingDays = [
+//       3, 4, 5, 6, 7, 10, 11, 12, 13, 14, 17, 18, 19, 20, 21, 24, 25, 26, 27, 28,
+//       31,
+//     ];
+//     var requests = [
+//       {
+//         NurseID: 1,
+//         DateFrom: 5,
+//         DateUntil: 6,
+//         DayType: 1,
+//       },
+//       {
+//         NurseID: 1,
+//         DateFrom: 12,
+//         DateUntil: 13,
+//         DayType: 1,
+//       },
+//     ];
 
-app.get("/test", async (req, res) => {
-  const db_connection = await connection();
-  try {
-    const [result] = await db_connection.query("select * from scheduls");
-  } catch (err) {
-    res.status(507).send("error");
-  } finally {
-    await db_connection.end();
-  }
-});
-
-// app.post('/fill', async async (req, res) => {
-//     await beginTransaction(), (err) => {
-//         if (err)
-//         res.status(500).send(err);
-//     };
-//     for (let i = 1; i <= 27; i++) {
-//         for (let j = 1; j <= 7; j++) {
-//             await db_connection.query(`insert into nurses_sequencerules values(${ j }, ${ i })`,
-//                 (err, result) => {
-//                     if (err)
-//                         console.log(err);
-//                 })
-//         }
-//     }
-//     await commitTransaction(db_connection), (err) => {
-//         if (err)
-//         res.status(500).send(err);
-//     };
-//     res.status(200).send("Uspešno sačuvano");
-// })
+//     await startTransaction(db_connection);
+//     await addMainNursesAssignements(
+//       db_connection,
+//       schid,
+//       WorkingDays,
+//       requests
+//     );
+//     await commitTransaction(db_connection);
+//     res.send();
+//   } catch (err) {
+//     res.statusCode(500).send(err);
+//   }
+// });
