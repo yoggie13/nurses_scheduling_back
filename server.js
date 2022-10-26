@@ -849,7 +849,7 @@ app.post("/requests/", async (req, res) => {
     );
     await commitTransaction(db_connection);
 
-    // var p = await open(process.env.AMPL_LOC);
+    var p = await open(process.env.AMPL_LOC);
     res.status(200).send("Uspešno sačuvano");
   } catch (err) {
     console.log(err);
