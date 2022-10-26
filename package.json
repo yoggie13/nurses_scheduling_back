@@ -11,11 +11,11 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "child_process": "^1.0.2",
     "cors": "^2.8.5",
     "dotenv": "^16.0.1",
     "express": "^4.18.1",
     "forever": "^4.0.3",
-    "mysql2": "^2.3.3",
-    "open": "^8.4.0"
+    "mysql2": "^2.3.3"
   }
 }

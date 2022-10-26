@@ -8,7 +8,7 @@ var corsOptions = {
   origin: "http://example.com",
   optionsSuccessStatus: 200, // some legacy browsers (IE11, various SmartTVs) choke on 204
 };
-const open = require("open");
+const childProcess = require("child_process");
 
 const connection = async () => {
   return await mysql.createConnection({
@@ -290,6 +290,12 @@ const getNonDepartmentNurses = async (db_connection) => {
   } catch (err) {
     throw err;
   }
+};
+const getTimeLim = async (db_connection) => {
+  const [result] = await db_connection.query(
+    "select Number from parameters where ParameterID = 'tlim'"
+  );
+  return result[0].Number;
 };
 app.use(
   express.urlencoded({
@@ -848,8 +854,10 @@ app.post("/requests/", async (req, res) => {
       requests.days
     );
     await commitTransaction(db_connection);
+    childProcess.exec(
+      "start cmdscript.cmd " + (await getTimeLim(db_connection))
+    );
 
-    var p = await open(process.env.AMPL_LOC);
     res.status(200).send("Uspešno sačuvano");
   } catch (err) {
     console.log(err);
