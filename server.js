@@ -920,39 +920,3 @@ app.post("/schedules/:id", async (req, res) => {
     await db_connection.end();
   }
 });
-// app.post("/fill", async (req, res) => {
-//   try {
-//     const db_connection = await connection();
-//     var schid = 96;
-//     var WorkingDays = [
-//       3, 4, 5, 6, 7, 10, 11, 12, 13, 14, 17, 18, 19, 20, 21, 24, 25, 26, 27, 28,
-//       31,
-//     ];
-//     var requests = [
-//       {
-//         NurseID: 1,
-//         DateFrom: 5,
-//         DateUntil: 6,
-//         DayType: 1,
-//       },
-//       {
-//         NurseID: 1,
-//         DateFrom: 12,
-//         DateUntil: 13,
-//         DayType: 1,
-//       },
-//     ];
-
-//     await startTransaction(db_connection);
-//     await addMainNursesAssignements(
-//       db_connection,
-//       schid,
-//       WorkingDays,
-//       requests
-//     );
-//     await commitTransaction(db_connection);
-//     res.send();
-//   } catch (err) {
-//     res.statusCode(500).send(err);
-//   }
-// });
