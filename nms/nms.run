@@ -1,0 +1,177 @@
+model "nms/nms.mod";
+param connectionString symbolic = "DRIVER={MySQL ODBC 8.0 Unicode Driver};SERVER=localhost;PORT=3306;USER=root;PASSWORD=mmjesuper.13;DATABASE=nurses_scheduling;";
+option solver gurobi;
+#option gurobi_options "timelim=30";
+option gurobi_options "outlev=1";
+
+table nurses "ODBC" (connectionString) "nurses"
+	"SQL=SELECT NurseID FROM nurses WHERE Active = 1 and Main = 0 and InDepartment = 1":
+	N <- [NurseID];
+	
+table experienced_nurses "ODBC" (connectionString) "nurses"
+	"SQL=SELECT NurseID FROM nurses WHERE Experienced = 1 AND Active = 1 and Main = 0 and InDepartment = 1":
+	NE <- [NurseID];
+	
+table shifts "ODBC" (connectionString) "shifts"
+	"SQL=select ShiftID from shifts":
+	SH <- [ShiftID];
+
+table patterns "ODBC" (connectionString) "patterns"
+	"SQL=select PatternID, Duration from patterns":
+	PAT <- [PatternID], tsh ~ Duration;
+
+table patterns_tuples "ODBC" (connectionString) "pattern_shift"
+	"SQL= select PatternID, ShiftID, Includes from pattern_shift":
+	PAT_tuples <- [PatternID, ShiftID, Includes];
+	
+table strong_shifts "ODBC" (connectionString) "shifts"
+	"SQL=SELECT ShiftID FROM shifts WHERE StrongIntensity = 1":
+	SSH <- [ShiftID];
+	
+table weak_shifts "ODBC" (connectionString) "shifts"
+	"SQL=SELECT ShiftID FROM shifts WHERE StrongIntensity = 0":
+	WSH <- [ShiftID];
+	
+table days "ODBC" (connectionString) "schedules"
+	("SQL=select * from schedules order by ScheduleID DESC LIMIT 1;"):
+	SCH <- [ScheduleID], dpm ~ NumberOfDays, wdpm ~ WorkingDays, month ~ Month, year ~ Year;
+
+table sequence_rules "ODBC" (connectionString) "sequencerules"
+	("SQL=select srm.SequenceRuleID, count(1) as ts from sequencerules sr "
+	& "join sequencerulesmembers srm on (sr.SequenceRuleID = srm.SequenceRuleMemberID) "
+	& "where Active = 1 " 
+	& "group by srm.SequenceRuleID"):
+	RS <- [SequenceRuleID], ts;
+
+table sequence_rule_members "ODBC" (connectionString) "sequencerulemembers"
+	("SQL=select srm.SequenceRuleID as SRID, srm.SequenceRuleMemberID as SRMID, srm.PatternID as PID from sequencerules sr "
+	& "join sequencerulesmembers srm on (sr.SequenceRuleID = srm.SequenceRuleMemberID) "
+	& "order by srm.SequenceRuleID, srm.SequenceRuleMemberID"):
+	prs_tuples <- [SRID, SRMID, PID];
+	
+table nurses_sr "ODBC" (connectionString) "sequencerulemembers"
+	("SQL=SELECT ns.SequenceRuleID, ns.NurseID FROM nurses_sequencerules ns"
+	& " JOIN nurses n ON (ns.NurseID = n.NurseID)"
+	& " JOIN sequencerules s ON (ns.SequenceRuleID = s.SequenceRuleID)"
+	& " WHERE n.Active = 1 AND n.Main = 0 and n.InDepartment = 1 and s.Active = 1"):
+	NS_tuples <- [SequenceRuleID, NurseID];
+
+table groupingrules "ODBC" (connectionString) "groupingrules"
+	"SQL=select * from groupingrules where Active = 1":
+	RG <- [GroupingRuleID], prg ~ PatternID, tg ~ Duration, nug ~ MaxOccurences;
+
+table groupingrulesnurses "ODBC" (connectionString) "nurses_groupingrules"
+	("SQL=SELECT ng.GroupingRuleID, ng.NurseID FROM nurses_groupingrules ng"
+	& " JOIN nurses n ON (ng.NurseID = n.NurseID)"
+	& " JOIN groupingrules g ON (ng.GroupingRuleID = g.GroupingRuleID)"
+	& " WHERE n.Active = 1 AND n.Main = 0 and n.InDepartment = 1 and g.Active = 1"):
+	NR_tuples <- [GroupingRuleID, NurseID];
+	
+table dntable "ODBC" (connectionString) "nonworkingdaytypes"
+	"SQL=select NonWorkingDayTypeID, NumberOfHours from nonworkingdaytypes where Active = 1":
+	DN <- [NonWorkingDayTypeID], NWD_duration ~ NumberOfHours;
+
+table nurse_vac "ODBC" (connectionString) "nonworkingdays"
+	("SQL=SELECT n.NurseID, n.DateFrom, n.DateUntil, nt.NumberOfHours FROM nonworkingdays n"
+	& " join nonworkingdaytypes nt on (n.NonWorkingDayTypeID = nt.NonWorkingDayTypeID)"
+	& " JOIN nurses nu ON (n.NurseID = nu.NurseID)"
+	& " where n.ScheduleID=" & member(1, SCH)
+	& " AND nu.Active = 1 AND nu.InDepartment = 1 and nu.Main = 0"
+	& " and n.Must=1"):
+	VD_tuples <- [NurseID, DateFrom, DateUntil, NumberOfHours];
+
+table nurse_vac_pos "ODBC" (connectionString) "nonworkingdays"
+	("SQL=SELECT n.NurseID, n.DateFrom, n.DateUntil, nt.NumberOfHours FROM nonworkingdays n"
+	& " join nonworkingdaytypes nt on (n.NonWorkingDayTypeID = nt.NonWorkingDayTypeID)"
+	& " JOIN nurses nu ON (n.NurseID = nu.NurseID)"
+	& " where n.ScheduleID=" & member(1, SCH)
+	& " AND nu.Active = 1 AND nu.InDepartment = 1 and nu.Main = 0"
+	& " and n.Must=0"):
+	VD_tuples_pos <- [NurseID, DateFrom, DateUntil, NumberOfHours];
+
+table nurse_shift_must "ODBC" (connectionString) "nonworkingshifts"
+	("SQL=SELECT nws.NurseID, nws.DateFrom,  nws.DateUntil, nws.ShiftID FROM nonworkingshifts nws"
+	& " JOIN nurses n ON (nws.NurseID = n.NurseID)"
+	& " where nws.ScheduleID=" & member(1, SCH)
+	& " AND n.Active = 1 AND n.InDepartment = 1 AND n.Main = 0"
+	& " and nws.Must=1"):	
+	TF_tuples <- [NurseID, DateFrom,DateUntil,ShiftID];
+
+table nurse_shift_would "ODBC" (connectionString) "nonworkingshifts"
+	("SQL=SELECT nws.NurseID, nws.DateFrom,  nws.DateUntil, nws.ShiftID FROM nonworkingshifts nws"
+	& " JOIN nurses n ON (nws.NurseID = n.NurseID)"
+	& " where nws.ScheduleID=" & member(1, SCH)
+	& " AND n.Active = 1 AND n.InDepartment = 1 AND n.Main = 0"
+	& " and nws.Must=0;"):
+	TP_tuples <- [NurseID, DateFrom, DateUntil, ShiftID];	
+
+table nurse_must_work "ODBC" (connectionString) "mustworkshifts"
+	("SQL=select mws.NurseID, mws.DateFrom, mws.DateUntil, mws.ShiftID from mustworkshifts mws"
+	& " join nurses n on (mws.NurseID = n.NurseID)"
+	& " where mws.ScheduleID=" & member(1,SCH)
+	& " and n.Active = 1 and n.Main = 0 and n.InDepartment = 1"):
+	TW_tuples <- [NurseID, DateFrom, DateUntil, ShiftID];
+
+table special_needs_shifts "ODBC" (connectionString) "specialneedsshifts"
+	("SQL=select Day, ShiftID, NumberOfNurses from specialneedsshifts"
+	& " where ScheduleID=" & member(1,SCH)):
+	nis_tuples <- [Day, ShiftID, NumberOfNurses];
+
+table params "ODBC" (connectionString) "parameters"
+	"SQL=select ParameterID, Number from parameters":
+	PAR <- [ParameterID], nu ~ Number;
+	
+table prev_sched "ODBC" (connectionString) "assignements"
+	("SQL=SELECT a.NurseID, a.Day - s.NumberOfDays as Day, a.PatternID FROM assignements a"
+	& " join schedules s on (a.ScheduleID = s.ScheduleID)"
+	& " where s.Month = " & month[member(1,SCH)]-1
+	& " and s.Year = " & year[member(1,SCH)]
+	& " and s.Chosen = 1"
+	& " and a.Day > s.NumberOfDays - " & if maxDurRG > maxDurRS then maxDurRG-1 else maxDurRS-1):
+	PSCHA <- [NurseID, Day, PatternID];
+
+
+read table nurses;
+read table shifts;
+read table patterns;
+read table patterns_tuples;
+read table strong_shifts;
+read table weak_shifts;
+read table days;
+read table dntable;
+read table experienced_nurses;
+read table groupingrules;
+read table groupingrulesnurses;
+read table sequence_rules;
+read table sequence_rule_members;
+read table nurses_sr;
+read table nurse_vac;
+read table nurse_vac_pos;
+read table nurse_shift_must;
+read table nurse_shift_would;
+read table params;
+read table nurse_must_work;
+read table special_needs_shifts;
+read table prev_sched;
+
+for{(i,j,k,w) in VD_tuples_pos}{
+	for{l in j..k}{
+		let PH_pos[i, l] := w;
+	}
+}
+
+solve;
+
+for {n in N}{
+	for {d in D, p in PAT diff {0}}{
+		if x[n,d,p] = 1 then let pat_assign[member(1,SCH),n,d] := p;
+	}
+}
+
+param sch_id := member(1,SCH);
+
+table assignements INOUT "ODBC" (connectionString) "assignements":
+	{s in SCH, n in N, d in D : x[n,d,0] = 0} ->  [s ~ ScheduleID, n ~ NurseID, d ~ Day],
+	pat_assign[s, n, d] ~ PatternID;
+	 
+write table assignements;
