@@ -81,7 +81,7 @@ table nurses_sr IN 'ODBC' 'DSN=gmpl_odbc;SERVER=localhost;PORT=3306;DATABASE=nur
 	& ' WHERE n.Active = 1 AND n.Main = 0 AND n.InDepartment = 1 AND s.Active = 1'):
 	NS_tuples <- [SequenceRuleID, NurseID];
 
-set NS{i in RS} := {j in N : (i,j) in NS_tuples}; #pravilo sekvenci za koje sestre važi
+set NS{i in RS} := {j in N : (i,j) in NS_tuples}; #pravilo sekvenci za koje sestre vaï¿½i
 set prs_tuples within {RS, D, PAT}; #pomocna            
 
 table sequence_rule_members IN 'ODBC' 'DSN=gmpl_odbc;SERVER=localhost;PORT=3306;DATABASE=nurses_scheduling;UID=root;PWD=mmjesuper.13;'
@@ -225,6 +225,8 @@ param t{n in N} := wdpm[1] * wtwd * card(WD[n]) / dpm[1] - PH[n]; #norma u h
 
 set Sequence_Constraint_Set {r in RS, n in NS[r]}:= NEGD union {1..dpm[1]-ts[r]+1 diff VD[n]} diff setof{(i,j) in TW[n]} i;
 set Grouping_Constraint_Set {r in RG, n in NR[r]} := NEGD union {1..dpm[1]-tg[r]+1} diff setof{(i,j) in TW[n]} i;
+set Max_Working_Set {n in N} := setof{(i,j) in TW[n]} i;
+set Max_Working_Set_Upgraded {n in N} := setof{i in Max_Working_Set[n] : forall{wd in i..i+wdir} wd in Max_Working_Set[n]} i+wdir;
  
 var x{n in N, d in NEGD union D, p in PAT}, binary, >= if (n,d,p) in PSCHA then 1 else 0; # da li sestra n dana d radi po paternu p
 var dsL{D,SSH}, >=0;            # podbacaj broja MS u smenama jakog intenziteta
@@ -236,9 +238,6 @@ var daT{N}, >=0;				# podbacaj za preferirane izostanke dana
 var tnL{N}, >=0;                # podbacaj norme u h
 var tnT{N}, >=0;                # prebacaj norme u h
 var tn, >=0;                    # maksimum svih odstupanja od radne norme
-
-#set ASSIGN{SCH,N,D}; #posle za ispis
-#param pat_assign{s in SCH, n in N, d in D, p in PAT diff{0}} := if x[n,d,p] = 1 then 1;
 
 minimize f: M1 * sum{d in D, s in SSH} (dsL[d,s] + dsT[d,s]) +      # idealan broj MS u smenama jakog intenziteta
             M2 * sum{d in D, s in WSH} (dwL[d,s] + dwT[d,s]) +      # idealan broj MS u smenama slabog intenziteta
@@ -261,17 +260,12 @@ s.t.
     yeswork{n in N : card(TW[n]) > 0}: sum{(d,s) in TW[n], p in PAT : pattern[p,s]} x[n,d,p] = 1;
     pref_aps_shifts{n in N : card(TP[n]) > 0}: sum {(d,s) in TP[n], p in PAT : pattern[p,s]} x[n,d,p] - shT[n] = 0;
     pref_aps_days{n in N, s in SH : card(VD_pos[n]) > 0}: sum {d in VD_pos[n], p in PAT : pattern[p,s]} x[n,d,p] - daT[n] = 0;
-	max_days_in_a_row{n in N, d in D, p in PAT diff {0}}: sum {wd in d-wdir-1..d} x[n,wd,p] <= wdir;
-	time_norm{n in N}: sum{d in WD[n], p in PAT} (tsh[p] * x[n,d,p] - tnT[n] + tnL[n] + PH_pos[n,d]*(1 - if p == 0 then 0 else x[n,d,p])) = t[n];
+    max_days_in_a_row{n in N, d in D diff Max_Working_Set_Upgraded[n] diff VD[n]}: sum {wd in d-wdir..d, p in PAT diff {0}} x[n,wd,p] <= wdir;
+    time_norm{n in N}: sum{d in WD[n], p in PAT} (tsh[p] * x[n,d,p] - tnT[n] + tnL[n] + PH_pos[n,d]*(1 - if p == 0 then 0 else x[n,d,p])) = t[n];
     time_devL{n in N}: tn >= tnL[n];
     time_devT{n in N}: tn >= tnT[n];
 	
-
 solve;
-
-#forall{n in N, d in D, p in PAT diff {0}}:
-#	pat_assign[SCHID[1],n,d] = if x[n,d,p] = 1 then p;
-
 
 table assignements {s in SCH, n in N, d in D, p in PAT diff{0} : x[n,d,p] = 1} OUT 'ODBC' 'DSN=gmpl_odbc;SERVER=localhost;PORT=3306;DATABASE=nurses_scheduling;UID=root;PWD=mmjesuper.13;'
 	'assignements':
